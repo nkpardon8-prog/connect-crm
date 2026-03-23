@@ -91,3 +91,12 @@ export interface AISuggestion {
   createdAt: string;
   dismissed: boolean;
 }
+
+export interface Campaign {
+  id: string;
+  subject: string;
+  body: string;
+  recipientIds: string[];
+  sentAt: string;
+  sentBy: string;
+}

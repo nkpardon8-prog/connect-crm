@@ -1,4 +1,4 @@
-import type { User, Lead, Activity, EmailMessage, Deal, AISuggestion, EmailSequence } from '@/types/crm';
+import type { User, Lead, Activity, EmailMessage, Deal, AISuggestion, EmailSequence, Campaign } from '@/types/crm';
 
 export const mockUsers: User[] = [
   { id: 'u1', name: 'Sarah Chen', email: 'sarah@integrateapi.ai', role: 'admin' },
@@ -113,4 +113,23 @@ export const mockCredentials = [
   { email: 'sarah@integrateapi.ai', password: 'admin123', userId: 'u1' },
   { email: 'marcus@integrateapi.ai', password: 'employee123', userId: 'u2' },
   { email: 'aisha@integrateapi.ai', password: 'employee123', userId: 'u3' },
+];
+
+export const mockCampaigns: Campaign[] = [
+  {
+    id: 'camp1',
+    subject: 'Introducing IntegrateAPI — Save 40 hours/month on integrations',
+    body: 'Hi {{firstName}},\n\nI wanted to reach out because {{company}} could benefit from our API-first platform.\n\nWe help teams like yours cut integration time by 60%. Would you be open to a quick 15-minute call this week?\n\nBest,\nSarah Chen\nIntegrateAPI',
+    recipientIds: ['l2', 'l6', 'l9', 'l12', 'l16', 'l19'],
+    sentAt: '2026-03-15T09:00:00Z',
+    sentBy: 'u1',
+  },
+  {
+    id: 'camp2',
+    subject: 'Q1 Product Update — New Enterprise Features',
+    body: 'Hi {{firstName}},\n\nExciting news from IntegrateAPI! We just shipped:\n\n• SOC2-compliant API gateway\n• Bulk data processing (50k records/min)\n• Custom webhook routing\n\nWould love to show you how these could help {{company}}.\n\nCheers,\nMarcus Rivera\nIntegrateAPI',
+    recipientIds: ['l1', 'l4', 'l7', 'l10', 'l15', 'l18', 'l21'],
+    sentAt: '2026-03-20T10:00:00Z',
+    sentBy: 'u2',
+  },
 ];
