@@ -444,7 +444,7 @@ export default function OutreachPage() {
             </>
           )}
 
-          {campaignStep === 'compose' && (
+          {campaignMode === 'manual' && campaignStep === 'compose' && (
             <>
               <div className="flex items-center gap-3">
                 <Button variant="ghost" size="sm" onClick={() => setCampaignStep('select')} className="gap-1.5">
