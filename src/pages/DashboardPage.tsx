@@ -1,0 +1,195 @@
+import { useCRM } from '@/contexts/CRMContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Users, Phone, Mail, TrendingUp, DollarSign, ArrowUpRight } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts';
+
+const statusColors: Record<string, string> = {
+  cold: 'hsl(217.2 91.2% 59.8%)',
+  lukewarm: 'hsl(38 92% 50%)',
+  warm: 'hsl(25 95% 53%)',
+  dead: 'hsl(0 72% 51%)',
+};
+
+export default function DashboardPage() {
+  const { leads, activities, deals } = useCRM();
+  const { user, isAdmin } = useAuth();
+
+  const myLeads = isAdmin ? leads : leads.filter(l => l.assignedTo === user?.id);
+  const myActivities = isAdmin ? activities : activities.filter(a => a.userId === user?.id);
+  const myDeals = isAdmin ? deals : deals.filter(d => d.assignedTo === user?.id);
+
+  const totalLeads = myLeads.length;
+  const callsMade = myActivities.filter(a => a.type === 'call').length;
+  const emailsSent = myActivities.filter(a => a.type === 'email_sent').length;
+  const warmLeads = myLeads.filter(l => l.status === 'warm').length;
+  const conversionRate = totalLeads > 0 ? ((warmLeads / totalLeads) * 100).toFixed(1) : '0';
+  const pipelineValue = myDeals.filter(d => d.stage !== 'closed_lost').reduce((sum, d) => sum + d.value, 0);
+
+  const funnelData = [
+    { name: 'Cold', value: myLeads.filter(l => l.status === 'cold').length },
+    { name: 'Lukewarm', value: myLeads.filter(l => l.status === 'lukewarm').length },
+    { name: 'Warm', value: myLeads.filter(l => l.status === 'warm').length },
+    { name: 'Dead', value: myLeads.filter(l => l.status === 'dead').length },
+  ];
+
+  const weeklyActivity = [
+    { day: 'Mon', calls: 3, emails: 5 },
+    { day: 'Tue', calls: 5, emails: 4 },
+    { day: 'Wed', calls: 2, emails: 7 },
+    { day: 'Thu', calls: 6, emails: 3 },
+    { day: 'Fri', calls: 4, emails: 6 },
+  ];
+
+  const revenueData = [
+    { month: 'Oct', value: 12000 },
+    { month: 'Nov', value: 18000 },
+    { month: 'Dec', value: 24000 },
+    { month: 'Jan', value: 32000 },
+    { month: 'Feb', value: 45000 },
+    { month: 'Mar', value: pipelineValue },
+  ];
+
+  const stats = [
+    { label: 'Total Leads', value: totalLeads, icon: Users, change: '+12%' },
+    { label: 'Calls Made', value: callsMade, icon: Phone, change: '+8%' },
+    { label: 'Emails Sent', value: emailsSent, icon: Mail, change: '+23%' },
+    { label: 'Conversion Rate', value: `${conversionRate}%`, icon: TrendingUp, change: '+4.2%' },
+    { label: 'Pipeline Value', value: `$${(pipelineValue / 1000).toFixed(0)}k`, icon: DollarSign, change: '+18%' },
+  ];
+
+  return (
+    <div className="p-6 space-y-6 max-w-[1400px]">
+      <div>
+        <h1 className="text-2xl font-semibold text-foreground leading-tight">
+          {isAdmin ? 'Team Dashboard' : `Welcome back, ${user?.name.split(' ')[0]}`}
+        </h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          {isAdmin ? 'Overview of all team activity' : 'Your personal performance overview'}
+        </p>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        {stats.map(s => (
+          <Card key={s.label} className="border shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <s.icon className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs text-emerald-600 font-medium flex items-center gap-0.5">
+                  <ArrowUpRight className="h-3 w-3" />{s.change}
+                </span>
+              </div>
+              <p className="text-2xl font-semibold text-foreground">{s.value}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Charts row */}
+      <div className="grid lg:grid-cols-3 gap-4">
+        {/* Lead funnel */}
+        <Card className="border shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Lead Funnel</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={funnelData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={3}>
+                    {funnelData.map((entry) => (
+                      <Cell key={entry.name} fill={statusColors[entry.name.toLowerCase()] || '#94a3b8'} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex justify-center gap-4 mt-2">
+              {funnelData.map(d => (
+                <div key={d.name} className="flex items-center gap-1.5 text-xs">
+                  <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: statusColors[d.name.toLowerCase()] }} />
+                  <span className="text-muted-foreground">{d.name} ({d.value})</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Weekly activity */}
+        <Card className="border shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Weekly Activity</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[230px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={weeklyActivity}>
+                  <XAxis dataKey="day" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <Tooltip />
+                  <Bar dataKey="calls" fill="hsl(217.2 91.2% 59.8%)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="emails" fill="hsl(217.2 91.2% 75%)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Revenue forecast */}
+        <Card className="border shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Revenue Pipeline</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[230px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={revenueData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(214 20% 92%)" />
+                  <XAxis dataKey="month" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v / 1000}k`} />
+                  <Tooltip formatter={(v: number) => [`$${v.toLocaleString()}`, 'Pipeline']} />
+                  <Line type="monotone" dataKey="value" stroke="hsl(217.2 91.2% 59.8%)" strokeWidth={2} dot={{ r: 4, fill: 'hsl(217.2 91.2% 59.8%)' }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Leaderboard (admin only) */}
+      {isAdmin && (
+        <Card className="border shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Team Leaderboard</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {[
+                { name: 'Marcus Rivera', calls: 8, emails: 12, leads: leads.filter(l => l.assignedTo === 'u2').length },
+                { name: 'Aisha Patel', calls: 6, emails: 9, leads: leads.filter(l => l.assignedTo === 'u3').length },
+              ].map((rep, i) => (
+                <div key={rep.name} className="flex items-center gap-4 p-3 rounded-lg bg-muted/50">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-medium">
+                    {rep.name.split(' ').map(n => n[0]).join('')}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">{rep.name}</p>
+                    <p className="text-xs text-muted-foreground">{rep.leads} leads assigned</p>
+                  </div>
+                  <div className="flex gap-3">
+                    <Badge variant="secondary" className="text-xs">{rep.calls} calls</Badge>
+                    <Badge variant="secondary" className="text-xs">{rep.emails} emails</Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
