@@ -10,7 +10,7 @@
 
 ## Overview
 
-The Settings page (`/settings`) provides three sections: an editable user profile card, an admin-only team management panel, and a list of integrations. Profile name and sending email are now editable — changes are persisted to Supabase via `updateProfile` and the AuthContext user state is refreshed immediately. Team management buttons are currently non-functional placeholders. Integrations reflect current connection status.
+The Settings page (`/settings`) provides three sections: an editable user profile card, an admin-only team management panel, and a list of integrations. Profile name and sending email are now editable — changes are persisted to Supabase via `updateProfile` and the AuthContext user state is refreshed immediately. Team management supports inviting new members via a token-based invite flow and removing existing members with a confirmation dialog. Integrations reflect current connection status.
 
 ---
 
@@ -45,15 +45,32 @@ Only rendered when `isAdmin === true`.
   - Role badge (secondary variant, capitalized)
   - Delete button (Trash2 icon) — **only shown for non-admin users**
 
-**Delete button behavior:**
-- Shows `text-muted-foreground` normally, `hover:text-destructive` on hover
-- **Has no onClick handler** — clicking does nothing
-- Purely visual placeholder
-
 **"+ Add Team Member" button:**
 - Outline variant, small size
-- **Has no onClick handler** — clicking does nothing
-- Purely visual placeholder
+- Opens the **invite dialog** on click
+
+**Invite flow:**
+1. Admin clicks "+ Add Team Member" — an invite dialog opens
+2. Dialog contains three fields: Name, Email, and Role (admin / employee)
+3. Admin fills in the fields and clicks "Send Invite"
+4. The form calls the `create-invite` Edge Function with `{ name, email, role }`
+5. The Edge Function generates a secure token, stores the invite in the `invites` table, and returns an invite link
+6. The invite link is displayed to the admin (e.g. copy-to-clipboard) so they can share it with the new member out-of-band
+7. The new member visits the link, which opens the login page in Sign Up mode pre-filled with their email, and they set their password to complete signup
+
+**Delete button behavior:**
+- Shows `text-muted-foreground` normally, `hover:text-destructive` on hover
+- Clicking opens a **confirmation dialog** — "Are you sure you want to remove [name] from the team?"
+- On confirm, calls the `delete-member` Edge Function with `{ userId }`
+- The member is removed from `auth.users` (cascades to `profiles`)
+- Their leads and deals are preserved — `assigned_to` is set to NULL via `ON DELETE SET NULL`
+- The profiles list is refreshed automatically after deletion
+
+**Delete flow summary:**
+1. Admin clicks Trash icon on a team member row
+2. Confirmation dialog appears with the member's name
+3. Admin confirms → `delete-member` Edge Function is called
+4. Member is removed; their CRM records remain unassigned
 
 ### Integrations Card
 
@@ -86,15 +103,29 @@ No connection/configuration flow exists.
 | `editName` | `string` | Controlled value for the Name input, initialized from `user.name` |
 | `editSendingEmail` | `string` | Controlled value for the Sending Email input, initialized from `user.sendingEmail` |
 | `saving` | `boolean` | `true` while the Supabase updateProfile write is in flight |
+| `inviteOpen` | `boolean` | Controls visibility of the invite dialog |
+| `inviteName` | `string` | Controlled value for the Name field in the invite dialog |
+| `inviteEmail` | `string` | Controlled value for the Email field in the invite dialog |
+| `inviteRole` | `string` | Controlled value for the Role selector in the invite dialog |
+| `inviteLink` | `string \| null` | Invite link returned by `create-invite` Edge Function, displayed for copy |
+| `inviting` | `boolean` | `true` while the `create-invite` call is in flight |
+| `deleteTarget` | `Profile \| null` | Profile staged for deletion; controls visibility of the confirmation dialog |
+| `deleting` | `boolean` | `true` while the `delete-member` call is in flight |
 
 **Functions:**
 - `handleSave()` — sets `saving` to `true`, calls `updateProfile({ name: editName, sendingEmail: editSendingEmail })`, then calls `refreshUser()` so the global user state reflects the change, then sets `saving` to `false`
+- `handleInvite()` — calls the `create-invite` Edge Function with `{ name: inviteName, email: inviteEmail, role: inviteRole }`, stores the returned invite link in `inviteLink` state for the admin to copy
+- `handleDeleteConfirm()` — calls the `delete-member` Edge Function with `{ userId: deleteTarget.id }`, then clears `deleteTarget` and triggers a profiles refetch
 
 **Mutations used:**
 - `updateProfile` from `useProfiles()` — persists name and sending email changes to Supabase
 - `refreshUser` from `useAuth()` — re-fetches the user profile after save so the UI updates immediately
 
-**UI Components:** `Card`, `CardContent`, `CardHeader`, `CardTitle`, `CardDescription`, `Badge`, `Button`, `Input`, `Label` (from shadcn/ui); `User`, `Shield`, `Plug`, `Trash2` (from lucide-react)
+**Edge Functions called:**
+- `create-invite` — generates invite token and returns invite link
+- `delete-member` — hard-deletes user from auth.users
+
+**UI Components:** `Card`, `CardContent`, `CardHeader`, `CardTitle`, `CardDescription`, `Badge`, `Button`, `Input`, `Label`, `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogFooter`, `Select` (from shadcn/ui); `User`, `Shield`, `Plug`, `Trash2`, `UserPlus` (from lucide-react)
 
 ---
 
@@ -113,9 +144,6 @@ No connection/configuration flow exists.
 ## Known Limitations & TODOs
 
 - No profile photo upload
-- Team management delete button has no handler
-- Team management add button has no handler
-- No actual team member CRUD (no addUser/removeUser)
 - No integration connection/configuration flow
 - No notification preferences
 - No theme/appearance settings (dark mode toggle, etc.)
@@ -123,13 +151,14 @@ No connection/configuration flow exists.
 - No account deletion
 - No password change
 - No API key management
+- Invite link is displayed in-app for copy — no automated email delivery of the invite link
 
 ---
 
 ## Future Considerations
 
 - Add profile photo upload
-- Implement team member CRUD (requires adding User management to context/backend)
+- Send invite link via email automatically (currently admin must copy and share manually)
 - Build integration connection flows (OAuth for Gmail, API key for Apollo.io, webhook for Slack)
 - Add notification preferences (email, in-app, Slack)
 - Add theme toggle (dark/light mode)
@@ -147,3 +176,4 @@ No connection/configuration flow exists.
 | 2026-03-23 | Team management uses real profiles from Supabase | `SettingsPage.tsx` |
 | 2026-03-23 | Profile editing: name and sending email are now editable with save | `SettingsPage.tsx` |
 | 2026-03-23 | sendingEmail required for email sending — users must set it before compose/reply/campaign | `SettingsPage.tsx` |
+| 2026-03-23 | Team management: "+ Add Team Member" opens invite dialog; Trash button opens confirmation dialog and calls delete-member Edge Function | `SettingsPage.tsx` |

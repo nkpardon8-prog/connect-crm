@@ -60,7 +60,7 @@ Central CRM entity.
 | industry | text | NOT NULL | '' |
 | location | text | NOT NULL | '' |
 | status | text | NOT NULL, CHECK (cold, lukewarm, warm, dead) | 'cold' |
-| assigned_to | uuid | NOT NULL, FK → profiles(id) | — |
+| assigned_to | uuid | FK → profiles(id) ON DELETE SET NULL | NULL |
 | last_contacted_at | timestamptz | — | NULL |
 | notes | text | NOT NULL | '' |
 | tags | text[] | NOT NULL | '{}' |
@@ -71,6 +71,8 @@ Central CRM entity.
 | deleted_at | timestamptz | — | NULL (soft delete) |
 
 **Indexes:** assigned_to, status, industry, deleted_at (partial: WHERE NULL)
+
+**FK note:** `assigned_to` uses `ON DELETE SET NULL` (nullable) so that deleting a team member does not cascade-delete their leads — the leads are preserved and become unassigned.
 
 ### activities
 
@@ -123,12 +125,14 @@ Central CRM entity.
 | title | text | NOT NULL | — |
 | value | numeric(12,2) | NOT NULL | 0 |
 | stage | text | NOT NULL, CHECK (new, contacted, qualified, proposal, negotiation, closed_won, closed_lost) | 'new' |
-| assigned_to | uuid | NOT NULL, FK → profiles(id) | — |
+| assigned_to | uuid | FK → profiles(id) ON DELETE SET NULL | NULL |
 | created_at | timestamptz | NOT NULL | now() |
 | updated_at | timestamptz | NOT NULL | now() (auto-updated) |
 | deleted_at | timestamptz | — | NULL (soft delete) |
 
 **Indexes:** lead_id, assigned_to, stage, deleted_at (partial: WHERE NULL)
+
+**FK note:** `assigned_to` uses `ON DELETE SET NULL` (nullable) so that deleting a team member preserves their deals in an unassigned state.
 
 ### ai_suggestions
 
@@ -185,6 +189,25 @@ Central CRM entity.
 | updated_at | timestamptz | NOT NULL | now() (auto-updated) |
 
 **Indexes:** sequence_id
+
+### invites
+Stores pending team member invitations. Consumed on successful signup.
+
+| Column | Type | Constraints | Default |
+|--------|------|-------------|---------|
+| id | uuid | PK | uuid_generate_v4() |
+| email | text | NOT NULL | — |
+| name | text | NOT NULL | — |
+| role | text | NOT NULL, CHECK (admin, employee) | 'employee' |
+| token | text | NOT NULL, UNIQUE | — |
+| expires_at | timestamptz | NOT NULL | — |
+| used | boolean | NOT NULL | false |
+| created_by | uuid | FK → profiles(id) ON DELETE SET NULL | NULL |
+| created_at | timestamptz | NOT NULL | now() |
+
+**Indexes:** token (unique), email, used (partial: WHERE false)
+
+**Notes:** Tokens are single-use — `used` is set to `true` after the invited member completes signup. Expired or used tokens are rejected by the `signup-with-token` Edge Function.
 
 ### apollo_usage
 Tracks Apollo API credit consumption for circuit breaker enforcement.
@@ -311,6 +334,9 @@ Supabase Edge Functions provide server-side compute for operations that require 
 | `apollo-search` | `supabase/functions/apollo-search/index.ts` | Parses prompt via LLM, searches Apollo, bulk-enriches contacts, scores results, logs credit usage | Apollo.io API, OpenRouter (Qwen 3.5 Flash) |
 | `send-email` | `supabase/functions/send-email/index.ts` | Delivers outbound emails (compose, reply, campaign batch) via Resend API | Resend |
 | `email-events` | `supabase/functions/email-events/index.ts` | Receives Resend webhook events: writes bounce/open/click timestamps to the emails table (`email.bounced`, `email.opened`, `email.clicked`); also handles `email.received` (inbound emails) — fetches full message body from Resend API, matches thread via `In-Reply-To` header, matches sender to a lead, inserts inbound email, logs `email_received` activity | Resend (webhook) |
+| `create-invite` | `supabase/functions/create-invite/index.ts` | Admin-only: validates caller is admin, generates a secure random token, inserts a row into `invites`, returns the invite link | — |
+| `signup-with-token` | `supabase/functions/signup-with-token/index.ts` | Public: validates invite token (exists, not used, not expired), calls `supabase.auth.admin.createUser` with the provided password, marks the invite as `used = true`, returns session tokens for auto-login | — |
+| `delete-member` | `supabase/functions/delete-member/index.ts` | Admin-only: deletes a user from `auth.users` (cascades to `profiles`); `ON DELETE SET NULL` on `leads.assigned_to` and `deals.assigned_to` ensures their records are preserved unassigned | — |
 
 ### campaign-ai
 
@@ -325,6 +351,24 @@ Accepts a campaign prompt, lead summaries, available industries, and chat histor
 Accepts a free-text user prompt describing an ideal customer profile. Uses Qwen 3.5 Flash (via OpenRouter) to parse the prompt into structured Apollo filters (job title, seniority, industry, company size, location). Calls Apollo's `/mixed_people/search` endpoint, then bulk-enriches results via Apollo's `/people/bulk_match` for verified emails and phone numbers. Validates email deliverability via ZeroBounce and scores each contact 0–100 by contact quality. Writes credit usage to the `apollo_usage` table. Returns up to 50 enriched, scored leads to the frontend.
 
 **Environment secrets required:** `APOLLO_API_KEY`, `OPENROUTER_API_KEY`, `ZEROBOUNCE_API_KEY` (set via `supabase secrets set`)
+
+### create-invite
+
+Admin-only endpoint (validates JWT + `is_admin()`). Accepts `{ email, name, role }` in the request body. Generates a cryptographically random token, sets `expires_at` to 7 days from now, and inserts a row into the `invites` table. Returns the invite link (e.g. `https://<app>/signup?token=<token>`) for the admin to share with the new member.
+
+**No environment secrets required.** Uses the Supabase service-role key (available automatically inside Edge Functions) to bypass RLS for the insert.
+
+### signup-with-token
+
+Public endpoint (no auth required). Accepts `{ token, password }`. Looks up the invite by token — rejects if not found, already `used`, or past `expires_at`. Calls `supabase.auth.admin.createUser` with `email`, `password`, and `raw_user_meta_data: { name, role }` from the invite row — this triggers the `handle_new_user` trigger which creates the `profiles` row. Marks the invite as `used = true`. Returns a Supabase session (access token + refresh token) so the frontend can auto-login the new member immediately after signup.
+
+**No additional environment secrets required.**
+
+### delete-member
+
+Admin-only endpoint (validates JWT + `is_admin()`). Accepts `{ userId }` in the request body. Calls `supabase.auth.admin.deleteUser(userId)`, which hard-deletes the row from `auth.users`. The `ON DELETE CASCADE` from `auth.users → profiles` removes the profile. The `ON DELETE SET NULL` on `leads.assigned_to` and `deals.assigned_to` preserves all their CRM records in an unassigned state. Returns `{ success: true }` on completion.
+
+**No additional environment secrets required.**
 
 ---
 
@@ -356,3 +400,4 @@ Accepts a free-text user prompt describing an ideal customer profile. Uses Qwen 
 | 2026-03-23 | Added email_status to leads, sending_email to profiles, apollo_usage RLS, apollo-search Edge Function | leads, profiles, apollo_usage, supabase/functions/ |
 | 2026-03-23 | Added email tracking columns (provider_message_id, opened_at, clicked_at, bounced_at), send-email and email-events Edge Functions | emails table, supabase/functions/ |
 | 2026-03-23 | email-events Edge Function now handles inbound email (email.received) | supabase/functions/email-events/ |
+| 2026-03-23 | Team management: invites table, create-invite / signup-with-token / delete-member Edge Functions, FK changes (leads.assigned_to, deals.assigned_to now ON DELETE SET NULL) | invites table, supabase/functions/ |

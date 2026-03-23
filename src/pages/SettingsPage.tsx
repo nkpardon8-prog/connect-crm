@@ -2,20 +2,74 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProfiles } from '@/hooks/use-profiles';
+import { createInvite, deleteMember } from '@/lib/api/team';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { User, Shield, Plug, Trash2, Mail } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { User, Shield, Plug, Trash2, Mail, Copy } from 'lucide-react';
 
 export default function SettingsPage() {
   const { user, isAdmin, refreshUser } = useAuth();
   const { profiles, isLoading, updateProfile } = useProfiles();
+  const queryClient = useQueryClient();
 
   const [editName, setEditName] = useState(user?.name || '');
   const [editSendingEmail, setEditSendingEmail] = useState(user?.sendingEmail || '');
   const [saving, setSaving] = useState(false);
+
+  // Invite state
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [inviteName, setInviteName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('employee');
+  const [generatedToken, setGeneratedToken] = useState('');
+  const [inviteLoading, setInviteLoading] = useState(false);
+
+  // Delete state
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const handleCreateInvite = async () => {
+    setInviteLoading(true);
+    try {
+      const result = await createInvite(inviteName, inviteEmail, inviteRole);
+      setGeneratedToken(result.token);
+      toast.success('Invite created');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create invite');
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  const resetInviteDialog = () => {
+    setShowInviteDialog(false);
+    setInviteName('');
+    setInviteEmail('');
+    setInviteRole('employee');
+    setGeneratedToken('');
+  };
+
+  const handleDeleteMember = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await deleteMember(deleteTarget.id);
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      toast.success(`${deleteTarget.name} removed from team`);
+      setDeleteTarget(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to remove member');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!user) return;
@@ -96,13 +150,13 @@ export default function SettingsPage() {
                 </div>
                 <Badge variant="secondary" className="capitalize text-xs">{u.role}</Badge>
                 {u.role !== 'admin' && (
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setDeleteTarget({ id: u.id, name: u.name })}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 )}
               </div>
             ))}
-            <Button variant="outline" size="sm" className="mt-2">+ Add Team Member</Button>
+            <Button variant="outline" size="sm" className="mt-2" onClick={() => setShowInviteDialog(true)}>+ Add Team Member</Button>
           </CardContent>
         </Card>
       )}
@@ -132,6 +186,74 @@ export default function SettingsPage() {
           ))}
         </CardContent>
       </Card>
+
+      {/* Invite Dialog */}
+      <Dialog open={showInviteDialog} onOpenChange={open => { if (!open) resetInviteDialog(); else setShowInviteDialog(true); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Invite Team Member</DialogTitle>
+            <DialogDescription>Create an invite token for a new team member</DialogDescription>
+          </DialogHeader>
+          {!generatedToken ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Name</Label>
+                <Input placeholder="e.g., Marcus Rivera" value={inviteName} onChange={e => setInviteName(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input placeholder="e.g., marcus@mail.integrateapi.ai" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <Select value={inviteRole} onValueChange={setInviteRole}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="employee">Employee</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <DialogFooter>
+                <Button onClick={handleCreateInvite} disabled={inviteLoading || !inviteName.trim() || !inviteEmail.trim()}>
+                  {inviteLoading ? 'Generating...' : 'Generate Invite Token'}
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">Share this token with <strong>{inviteName}</strong>. It expires in 72 hours.</p>
+              <div className="flex items-center gap-2">
+                <Input value={generatedToken} readOnly className="font-mono text-sm" />
+                <Button variant="outline" size="icon" onClick={() => { navigator.clipboard.writeText(generatedToken); toast.success('Token copied'); }}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={resetInviteDialog}>Done</Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove team member?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete {deleteTarget?.name}'s account. Their assigned leads and deals will be unassigned. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteMember} disabled={deleteLoading} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleteLoading ? 'Removing...' : 'Remove'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

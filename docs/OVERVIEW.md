@@ -61,7 +61,7 @@ When adding changelog entries, use this format:
 | 7 | Lead Generator | [lead-generator.md](./lead-generator.md) | Active | Chat-based lead discovery via Apollo.io with enrichment |
 | 8 | Outreach & Email | [outreach.md](./outreach.md) | Active | Gmail-style inbox, compose, campaigns (AI + manual), sequences (display-only) |
 | 9 | Pipeline & Deals | [pipeline.md](./pipeline.md) | Active | Kanban board with drag-and-drop, 7 deal stages |
-| 10 | Settings | [settings.md](./settings.md) | Active | Profile editing (name + sending email), team management (non-functional), integrations status |
+| 10 | Settings | [settings.md](./settings.md) | Active | Profile editing (name + sending email), team management (invite new members, delete members), integrations status |
 | 11 | UI Components | [ui-components.md](./ui-components.md) | Active | shadcn/ui library, layout shell, custom components |
 | 12 | Database Schema | [schema.md](./schema.md) | Active | Supabase PostgreSQL schema, RLS policies, triggers, API layer |
 
@@ -243,3 +243,4 @@ Track all significant changes here: new features, architectural shifts, new rout
 | 2026-03-23 | Email status badges on leads + email tracking indicators in inbox | Leads, Outreach | Leads table/detail show verification status, inbox shows open/click/bounce tracking |
 | 2026-03-23 | Email UI redesign — Gmail-style message cards, formatting toolbar, flexible To field | Outreach | Messages display as email cards with From/To headers, compose accepts raw email addresses |
 | 2026-03-23 | Inbox folder sidebar — Inbox, Sent, All Mail folders for email filtering | Outreach | Gmail-style folder navigation within the inbox tab |
+| 2026-03-23 | Team management: invite tokens, signup flow, member deletion | Authentication, Settings, Schema | Admin generates invite link via create-invite Edge Function; new member signs up with token + password via signup-with-token Edge Function (auto-login on success); admin can delete members via delete-member Edge Function; leads/deals preserved unassigned on member deletion (ON DELETE SET NULL); login page now has Sign In / Sign Up toggle |

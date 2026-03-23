@@ -358,6 +358,50 @@ export type Database = {
           },
         ]
       }
+      invites: {
+        Row: {
+          id: string
+          email: string
+          name: string
+          role: string
+          token: string
+          expires_at: string
+          used: boolean
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          email: string
+          name: string
+          role?: string
+          token: string
+          expires_at: string
+          used?: boolean
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string
+          name?: string
+          role?: string
+          token?: string
+          expires_at?: string
+          used?: boolean
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invites_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           assigned_to: string
