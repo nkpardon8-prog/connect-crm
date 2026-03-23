@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import type { Lead, Activity, Deal, EmailMessage, AISuggestion } from '@/types/crm';
-import { mockLeads, mockActivities, mockDeals, mockEmails, mockSuggestions } from '@/data/mockData';
+import type { Lead, Activity, Deal, EmailMessage, AISuggestion, Campaign } from '@/types/crm';
+import { mockLeads, mockActivities, mockDeals, mockEmails, mockSuggestions, mockCampaigns } from '@/data/mockData';
 
 interface CRMContextType {
   leads: Lead[];
@@ -8,6 +8,7 @@ interface CRMContextType {
   deals: Deal[];
   emails: EmailMessage[];
   suggestions: AISuggestion[];
+  campaigns: Campaign[];
   updateLead: (id: string, updates: Partial<Lead>) => void;
   addLead: (lead: Lead) => void;
   addLeads: (leads: Lead[]) => void;
@@ -15,6 +16,7 @@ interface CRMContextType {
   updateDeal: (id: string, updates: Partial<Deal>) => void;
   addEmail: (email: EmailMessage) => void;
   dismissSuggestion: (id: string) => void;
+  addCampaign: (campaign: Campaign) => void;
 }
 
 const CRMContext = createContext<CRMContextType | undefined>(undefined);
@@ -25,6 +27,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   const [deals, setDeals] = useState<Deal[]>(mockDeals);
   const [emails, setEmails] = useState<EmailMessage[]>(mockEmails);
   const [suggestions, setSuggestions] = useState<AISuggestion[]>(mockSuggestions);
+  const [campaigns, setCampaigns] = useState<Campaign[]>(mockCampaigns);
 
   const updateLead = useCallback((id: string, updates: Partial<Lead>) => {
     setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
@@ -54,8 +57,12 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     setSuggestions(prev => prev.map(s => s.id === id ? { ...s, dismissed: true } : s));
   }, []);
 
+  const addCampaign = useCallback((campaign: Campaign) => {
+    setCampaigns(prev => [campaign, ...prev]);
+  }, []);
+
   return (
-    <CRMContext.Provider value={{ leads, activities, deals, emails, suggestions, updateLead, addLead, addLeads, addActivity, updateDeal, addEmail, dismissSuggestion }}>
+    <CRMContext.Provider value={{ leads, activities, deals, emails, suggestions, campaigns, updateLead, addLead, addLeads, addActivity, updateDeal, addEmail, dismissSuggestion, addCampaign }}>
       {children}
     </CRMContext.Provider>
   );
