@@ -257,7 +257,89 @@ export default function OutreachPage() {
 
         {/* Campaigns */}
         <TabsContent value="campaigns" className="mt-4 space-y-4">
-          {campaignStep === 'select' && (
+          {/* Mode toggle */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant={campaignMode === 'ai' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setCampaignMode('ai')}
+              className="gap-1.5"
+            >
+              <Bot className="h-3.5 w-3.5" /> AI Assistant
+            </Button>
+            <Button
+              variant={campaignMode === 'manual' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setCampaignMode('manual')}
+              className="gap-1.5"
+            >
+              <Pencil className="h-3.5 w-3.5" /> Manual
+            </Button>
+          </div>
+
+          {/* AI Mode */}
+          {campaignMode === 'ai' && (
+            <>
+              <CampaignAIChat
+                leads={leads}
+                industries={industries}
+                onApplyResult={(result) => {
+                  setSelectedLeadIds(new Set(result.matchedLeadIds));
+                  setCampaignSubject(result.subject);
+                  setCampaignBody(result.body);
+                  if (result.statusFilter) setStatusFilter(result.statusFilter);
+                  else setStatusFilter('all');
+                  if (result.industryFilter) setIndustryFilter(result.industryFilter);
+                  else setIndustryFilter('all');
+                  setCampaignStep('compose');
+                }}
+              />
+
+              {/* Show compose form when AI has filled it */}
+              {campaignStep === 'compose' && selectedLeadIds.size > 0 && (
+                <Card className="border shadow-sm">
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-foreground">AI-Generated Campaign</h3>
+                      <Badge variant="secondary" className="gap-1">
+                        <Users className="h-3 w-3" />
+                        {selectedLeadIds.size} recipients
+                      </Badge>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Subject</label>
+                      <Input
+                        value={campaignSubject}
+                        onChange={e => setCampaignSubject(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Body</label>
+                      <Textarea
+                        value={campaignBody}
+                        onChange={e => setCampaignBody(e.target.value)}
+                        className="min-h-[160px]"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Merge fields: <code className="bg-muted px-1 py-0.5 rounded text-[11px]">{'{{firstName}}'}</code>{' '}
+                        <code className="bg-muted px-1 py-0.5 rounded text-[11px]">{'{{company}}'}</code>
+                      </p>
+                    </div>
+                    <Button
+                      onClick={handleSendCampaign}
+                      disabled={!campaignSubject.trim() || !campaignBody.trim()}
+                      className="gap-1.5"
+                    >
+                      <Send className="h-4 w-4" /> Send to {selectedLeadIds.size} recipients
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+
+          {/* Manual Mode */}
+          {campaignMode === 'manual' && campaignStep === 'select' && (
             <>
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-semibold text-foreground">Select Recipients</h2>
