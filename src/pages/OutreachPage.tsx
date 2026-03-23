@@ -42,6 +42,7 @@ export default function OutreachPage() {
   const [campaignSubject, setCampaignSubject] = useState('');
   const [campaignBody, setCampaignBody] = useState('');
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
+  const [campaignMode, setCampaignMode] = useState<'manual' | 'ai'>('ai');
 
   const myLeads = leads.filter(l => l.assignedTo === user?.id);
   const sortedEmails = [...emails].sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
