@@ -6,6 +6,7 @@ export interface User {
   email: string;
   role: UserRole;
   avatar?: string;
+  sendingEmail?: string;
 }
 
 export type LeadStatus = 'cold' | 'lukewarm' | 'warm' | 'dead';
@@ -28,6 +29,7 @@ export interface Lead {
   notes: string;
   tags: string[];
   linkedinUrl?: string;
+  emailStatus?: string;
 }
 
 export type ActivityType = 'call' | 'email_sent' | 'email_received' | 'note' | 'status_change' | 'meeting';
@@ -54,6 +56,10 @@ export interface EmailMessage {
   direction: 'inbound' | 'outbound';
   threadId?: string;
   replyToId?: string;
+  providerMessageId?: string;
+  openedAt?: string;
+  clickedAt?: string;
+  bouncedAt?: string;
 }
 
 export type DealStage = 'new' | 'contacted' | 'qualified' | 'proposal' | 'negotiation' | 'closed_won' | 'closed_lost';

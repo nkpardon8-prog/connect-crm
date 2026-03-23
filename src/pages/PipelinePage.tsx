@@ -1,6 +1,7 @@
-import { useCRM } from '@/contexts/CRMContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockUsers } from '@/data/mockData';
+import { useDeals } from '@/hooks/use-deals';
+import { useLeads } from '@/hooks/use-leads';
+import { useProfiles } from '@/hooks/use-profiles';
 import type { DealStage, Deal } from '@/types/crm';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -18,18 +19,19 @@ const stages: { key: DealStage; label: string; color: string }[] = [
 ];
 
 export default function PipelinePage() {
-  const { deals, leads, updateDeal } = useCRM();
-  const { user, isAdmin } = useAuth();
+  const { deals, updateDeal, isLoading: dealsLoading } = useDeals();
+  const { leads } = useLeads();
+  const { profiles } = useProfiles();
+  const { isAdmin } = useAuth();
   const [draggedDeal, setDraggedDeal] = useState<string | null>(null);
 
-  const myDeals = isAdmin ? deals : deals.filter(d => d.assignedTo === user?.id);
-  const totalPipeline = myDeals.filter(d => !['closed_won', 'closed_lost'].includes(d.stage)).reduce((s, d) => s + d.value, 0);
+  const totalPipeline = deals.filter(d => !['closed_won', 'closed_lost'].includes(d.stage)).reduce((s, d) => s + d.value, 0);
 
   const handleDragStart = (dealId: string) => setDraggedDeal(dealId);
   const handleDragEnd = () => setDraggedDeal(null);
   const handleDrop = (stage: DealStage) => {
     if (draggedDeal) {
-      updateDeal(draggedDeal, { stage, updatedAt: new Date().toISOString() });
+      updateDeal(draggedDeal, { stage });
       setDraggedDeal(null);
     }
   };
@@ -39,18 +41,22 @@ export default function PipelinePage() {
     return lead ? `${lead.firstName} ${lead.lastName}` : 'Unknown';
   };
 
+  if (dealsLoading) {
+    return <div className="p-6 flex items-center justify-center min-h-[50vh]"><div className="text-sm text-muted-foreground">Loading...</div></div>;
+  }
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Pipeline</h1>
-          <p className="text-sm text-muted-foreground">{myDeals.length} deals · ${totalPipeline.toLocaleString()} active pipeline</p>
+          <p className="text-sm text-muted-foreground">{deals.length} deals · ${totalPipeline.toLocaleString()} active pipeline</p>
         </div>
       </div>
 
       <div className="flex gap-3 overflow-x-auto pb-4">
         {stages.map(stage => {
-          const stageDeals = myDeals.filter(d => d.stage === stage.key);
+          const stageDeals = deals.filter(d => d.stage === stage.key);
           const stageTotal = stageDeals.reduce((s, d) => s + d.value, 0);
           return (
             <div
@@ -82,7 +88,7 @@ export default function PipelinePage() {
                             <DollarSign className="h-3.5 w-3.5" />{deal.value.toLocaleString()}
                           </span>
                           <span className="text-[10px] text-muted-foreground">
-                            {isAdmin ? mockUsers.find(u => u.id === deal.assignedTo)?.name.split(' ')[0] : ''}
+                            {isAdmin ? profiles.find(p => p.id === deal.assignedTo)?.name?.split(' ')[0] : ''}
                           </span>
                         </div>
                       </CardContent>

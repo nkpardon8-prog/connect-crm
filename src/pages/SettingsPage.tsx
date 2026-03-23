@@ -1,14 +1,39 @@
+import { useState } from 'react';
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockUsers } from '@/data/mockData';
+import { useProfiles } from '@/hooks/use-profiles';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { User, Shield, Plug, Trash2 } from 'lucide-react';
+import { User, Shield, Plug, Trash2, Mail } from 'lucide-react';
 
 export default function SettingsPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, refreshUser } = useAuth();
+  const { profiles, isLoading, updateProfile } = useProfiles();
+
+  const [editName, setEditName] = useState(user?.name || '');
+  const [editSendingEmail, setEditSendingEmail] = useState(user?.sendingEmail || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      await updateProfile(user.id, { name: editName, sendingEmail: editSendingEmail });
+      await refreshUser();
+      toast.success('Profile updated');
+    } catch {
+      toast.error('Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (isLoading) {
+    return <div className="p-6 flex items-center justify-center min-h-[50vh]"><div className="text-sm text-muted-foreground">Loading...</div></div>;
+  }
 
   return (
     <div className="p-6 max-w-[800px] space-y-6">
@@ -26,17 +51,29 @@ export default function SettingsPage() {
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Name</Label>
-              <Input defaultValue={user?.name} readOnly />
+              <Input value={editName} onChange={e => setEditName(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>Email</Label>
               <Input defaultValue={user?.email} readOnly />
             </div>
           </div>
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Sending Email</Label>
+            <Input
+              placeholder="e.g., sarah@mail.integrateapi.ai"
+              value={editSendingEmail}
+              onChange={e => setEditSendingEmail(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">Used as the "from" address when sending emails from this CRM</p>
+          </div>
           <div className="flex items-center gap-2">
             <Label>Role</Label>
             <Badge variant="secondary" className="capitalize">{user?.role}</Badge>
           </div>
+          <Button onClick={handleSave} disabled={saving} size="sm">
+            {saving ? 'Saving...' : 'Save Changes'}
+          </Button>
         </CardContent>
       </Card>
 
@@ -48,7 +85,7 @@ export default function SettingsPage() {
             <CardDescription>Manage employee accounts</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {mockUsers.map(u => (
+            {profiles.map(u => (
               <div key={u.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
                 <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-medium">
                   {u.name.split(' ').map(n => n[0]).join('')}
@@ -78,8 +115,8 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           {[
-            { name: 'Apollo.io', desc: 'Lead generation and enrichment', status: 'Coming Soon' },
-            { name: 'Email Provider', desc: 'Connect Gmail, Outlook, or custom SMTP', status: 'Coming Soon' },
+            { name: 'Apollo.io', desc: 'Lead generation and enrichment', status: 'Connected' },
+            { name: 'Email Provider', desc: 'Powered by Resend for reliable email delivery', status: 'Setting Up' },
             { name: 'Slack', desc: 'Get notifications in your Slack workspace', status: 'Coming Soon' },
           ].map(int => (
             <div key={int.name} className="flex items-center gap-3 p-3 rounded-lg border">

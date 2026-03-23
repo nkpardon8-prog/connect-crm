@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useCRM } from '@/contexts/CRMContext';
+import { useLeads } from '@/hooks/use-leads';
+import { useActivities } from '@/hooks/use-activities';
+import { useProfiles } from '@/hooks/use-profiles';
 import { useAuth } from '@/contexts/AuthContext';
 import type { LeadStatus } from '@/types/crm';
-import { mockUsers } from '@/data/mockData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -21,7 +22,9 @@ const statusConfig: Record<LeadStatus, { label: string; className: string }> = {
 };
 
 export default function LeadsPage() {
-  const { leads, updateLead, addActivity } = useCRM();
+  const { leads, isLoading: leadsLoading, updateLead } = useLeads();
+  const { addActivity } = useActivities();
+  const { profiles } = useProfiles();
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
@@ -29,7 +32,7 @@ export default function LeadsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const visibleLeads = useMemo(() => {
-    let filtered = isAdmin ? leads : leads.filter(l => l.assignedTo === user?.id);
+    let filtered = leads;
     if (statusFilter !== 'all') filtered = filtered.filter(l => l.status === statusFilter);
     if (search) {
       const q = search.toLowerCase();
@@ -40,7 +43,7 @@ export default function LeadsPage() {
       );
     }
     return filtered;
-  }, [leads, isAdmin, user, statusFilter, search]);
+  }, [leads, statusFilter, search]);
 
   const toggleSelect = (id: string) => {
     setSelected(prev => {
@@ -63,7 +66,6 @@ export default function LeadsPage() {
   const handleCall = (e: React.MouseEvent, leadId: string, phone: string) => {
     e.stopPropagation();
     addActivity({
-      id: `a-${Date.now()}`,
       leadId,
       userId: user!.id,
       type: 'call',
@@ -77,7 +79,6 @@ export default function LeadsPage() {
   const handleEmail = (e: React.MouseEvent, leadId: string, email: string) => {
     e.stopPropagation();
     addActivity({
-      id: `a-${Date.now()}`,
       leadId,
       userId: user!.id,
       type: 'email_sent',
@@ -88,7 +89,32 @@ export default function LeadsPage() {
     window.location.href = `mailto:${email}`;
   };
 
-  const getRepName = (id: string) => mockUsers.find(u => u.id === id)?.name || 'Unassigned';
+  const getRepName = (id: string) => profiles.find(p => p.id === id)?.name || 'Unassigned';
+
+  const emailStatusBadge = (status?: string) => {
+    switch (status) {
+      case 'verified':
+      case 'likely_to_engage':
+        return <Badge variant="secondary" className="text-[10px] bg-emerald-50 text-emerald-700">Verified</Badge>;
+      case 'guessed':
+      case 'extrapolated':
+        return <Badge variant="secondary" className="text-[10px] bg-amber-50 text-amber-700">Guessed</Badge>;
+      case 'invalid':
+        return <Badge variant="secondary" className="text-[10px] bg-red-50 text-red-700">Invalid</Badge>;
+      case 'unverified':
+        return <Badge variant="secondary" className="text-[10px] bg-slate-50 text-slate-500">Unverified</Badge>;
+      default:
+        return <Badge variant="secondary" className="text-[10px] bg-slate-50 text-slate-500">Unknown</Badge>;
+    }
+  };
+
+  if (leadsLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[50vh]">
+        <div className="text-sm text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-4 max-w-[1400px]">
@@ -140,6 +166,7 @@ export default function LeadsPage() {
                 <TableHead>Status</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>Email Status</TableHead>
                 {isAdmin && <TableHead>Assigned</TableHead>}
                 <TableHead>Last Contact</TableHead>
               </TableRow>
@@ -175,6 +202,7 @@ export default function LeadsPage() {
                       {lead.email}
                     </button>
                   </TableCell>
+                  <TableCell className="text-xs">{emailStatusBadge(lead.emailStatus)}</TableCell>
                   {isAdmin && <TableCell className="text-sm">{getRepName(lead.assignedTo)}</TableCell>}
                   <TableCell className="text-sm text-muted-foreground">
                     {lead.lastContactedAt ? new Date(lead.lastContactedAt).toLocaleDateString() : 'Never'}

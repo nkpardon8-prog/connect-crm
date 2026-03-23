@@ -1,7 +1,14 @@
 import { useState, useMemo } from 'react';
-import { useCRM } from '@/contexts/CRMContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockUsers, mockSequences } from '@/data/mockData';
+import { useLeads } from '@/hooks/use-leads';
+import { useEmails } from '@/hooks/use-emails';
+import { useActivities } from '@/hooks/use-activities';
+import { useCampaigns } from '@/hooks/use-campaigns';
+import { useProfiles } from '@/hooks/use-profiles';
+import { useSequences } from '@/hooks/use-sequences';
+import { useQueryClient } from '@tanstack/react-query';
+import { sendEmail, sendBulkEmails } from '@/lib/api/send-email';
+import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, RefreshCw, Inbox, PenLine, Layers, Clock, Mail, MailOpen, Megaphone, ArrowRight, ArrowLeft, Users, ChevronDown, ChevronRight, Bot, Pencil, Reply, Forward, MailCheck, MailX, ArrowUpRight } from 'lucide-react';
+import { Send, RefreshCw, Inbox, PenLine, Layers, Clock, Mail, MailOpen, Megaphone, ArrowRight, ArrowLeft, Users, ChevronDown, ChevronRight, Bot, Pencil, Reply, Forward, MailCheck, MailX, ArrowUpRight, Eye, MousePointerClick, AlertTriangle, Bold, Italic, Link2, List } from 'lucide-react';
 import type { LeadStatus, EmailMessage } from '@/types/crm';
 import CampaignAIChat from '@/components/outreach/CampaignAIChat';
 
@@ -34,8 +41,20 @@ interface EmailThread {
 }
 
 export default function OutreachPage() {
-  const { emails, leads, addEmail, addActivity, campaigns, addCampaign, markEmailRead } = useCRM();
+  const { emails, addEmail, addEmailAsync, markEmailRead, isLoading: emailsLoading, isFetching } = useEmails();
+  const { leads } = useLeads();
+  const emailSafeLeads = useMemo(() =>
+    leads.filter(l =>
+      l.emailStatus === 'verified' || l.emailStatus === 'likely_to_engage'
+    ),
+    [leads]
+  );
+  const { addActivity } = useActivities();
+  const { campaigns, addCampaignAsync } = useCampaigns();
+  const { profiles } = useProfiles();
+  const { sequences } = useSequences();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState('inbox');
 
   // Inbox state
@@ -44,12 +63,14 @@ export default function OutreachPage() {
   const [replyBody, setReplyBody] = useState('');
   const [inboxSearch, setInboxSearch] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [inboxFolder, setInboxFolder] = useState<'inbox' | 'sent' | 'all'>('inbox');
 
   // Compose state
   const [toSearch, setToSearch] = useState('');
   const [toLeadId, setToLeadId] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  const [toEmail, setToEmail] = useState('');
 
   // Campaign state
   const [campaignStep, setCampaignStep] = useState<'select' | 'compose'>('select');
@@ -88,34 +109,46 @@ export default function OutreachPage() {
     return result.sort((a, b) => new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime());
   }, [emails]);
 
+  const folderThreads = useMemo(() => {
+    switch (inboxFolder) {
+      case 'inbox':
+        return threads.filter(t => t.messages.some(m => m.direction === 'inbound'));
+      case 'sent':
+        return threads.filter(t => t.messages.some(m => m.direction === 'outbound'));
+      case 'all':
+      default:
+        return threads;
+    }
+  }, [threads, inboxFolder]);
+
   const filteredThreads = useMemo(() => {
-    if (!inboxSearch) return threads;
+    if (!inboxSearch) return folderThreads;
     const q = inboxSearch.toLowerCase();
-    return threads.filter(t =>
+    return folderThreads.filter(t =>
       t.subject.toLowerCase().includes(q) ||
       t.participants.some(p => p.toLowerCase().includes(q)) ||
       t.messages.some(m => m.body.toLowerCase().includes(q))
     );
-  }, [threads, inboxSearch]);
+  }, [folderThreads, inboxSearch]);
 
   const selectedThread = threads.find(t => t.id === selectedThreadId) ?? null;
 
   // Compose lead search
   const filteredComposeLeads = useMemo(() => {
-    if (!toSearch) return leads.slice(0, 10);
+    if (!toSearch) return emailSafeLeads.slice(0, 10);
     const q = toSearch.toLowerCase();
-    return leads.filter(l =>
+    return emailSafeLeads.filter(l =>
       l.firstName.toLowerCase().includes(q) ||
       l.lastName.toLowerCase().includes(q) ||
       l.email.toLowerCase().includes(q) ||
       l.company.toLowerCase().includes(q)
     ).slice(0, 10);
-  }, [leads, toSearch]);
+  }, [emailSafeLeads, toSearch]);
 
-  const industries = useMemo(() => [...new Set(leads.map(l => l.industry))].sort(), [leads]);
+  const industries = useMemo(() => [...new Set(emailSafeLeads.map(l => l.industry).filter(Boolean))], [emailSafeLeads]);
 
   const filteredLeads = useMemo(() => {
-    return leads.filter(l => {
+    return emailSafeLeads.filter(l => {
       if (statusFilter !== 'all' && l.status !== statusFilter) return false;
       if (industryFilter !== 'all' && l.industry !== industryFilter) return false;
       if (campaignSearch) {
@@ -129,7 +162,7 @@ export default function OutreachPage() {
       }
       return true;
     });
-  }, [leads, statusFilter, industryFilter, campaignSearch]);
+  }, [emailSafeLeads, statusFilter, industryFilter, campaignSearch]);
 
   const allFilteredSelected = filteredLeads.length > 0 && filteredLeads.every(l => selectedLeadIds.has(l.id));
 
@@ -160,132 +193,169 @@ export default function OutreachPage() {
     thread.messages.filter(m => !m.read).forEach(m => markEmailRead(m.id));
   };
 
-  const handleSendReply = () => {
+  const handleSendReply = async () => {
     if (!selectedThread || !replyBody.trim()) return;
+    if (!user?.sendingEmail) {
+      toast.error('Set your sending email in Settings before sending');
+      return;
+    }
     const lastMsg = selectedThread.messages[selectedThread.messages.length - 1];
     const isForward = replyMode === 'forward';
-
     const toAddress = isForward ? '' : (lastMsg.direction === 'inbound' ? lastMsg.from : lastMsg.to);
+
+    if (!toAddress) {
+      toast.error('Forward requires a recipient address');
+      return;
+    }
+
     const newSubject = isForward
       ? `Fwd: ${selectedThread.subject}`
       : `Re: ${selectedThread.subject}`;
 
-    const email: EmailMessage = {
-      id: `e-${Date.now()}`,
-      leadId: selectedThread.leadId,
-      from: user!.email,
-      to: toAddress,
-      subject: newSubject,
-      body: replyBody.trim(),
-      sentAt: new Date().toISOString(),
-      read: true,
-      direction: 'outbound',
-      threadId: selectedThread.id,
-      replyToId: lastMsg.id,
-    };
-    addEmail(email);
-    if (selectedThread.leadId) {
-      addActivity({
-        id: `a-${Date.now()}`,
+    try {
+      await sendEmail({
         leadId: selectedThread.leadId,
-        userId: user!.id,
-        type: 'email_sent',
-        description: `${isForward ? 'Forwarded' : 'Replied'}: "${newSubject}"`,
-        timestamp: new Date().toISOString(),
+        from: user.sendingEmail,
+        fromName: user.name,
+        to: toAddress,
+        subject: newSubject,
+        body: replyBody.trim(),
+        threadId: selectedThread.id,
+        replyToId: lastMsg.id,
       });
+      if (selectedThread.leadId) {
+        addActivity({
+          leadId: selectedThread.leadId,
+          userId: user.id,
+          type: 'email_sent',
+          description: `Replied to thread: "${selectedThread.subject}"`,
+          timestamp: new Date().toISOString(),
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ['emails'] });
+      setReplyMode(null);
+      setReplyBody('');
+      toast.success('Reply sent');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send reply');
     }
-    setReplyBody('');
-    setReplyMode(null);
   };
 
-  const handleSendEmail = () => {
-    if (!toLeadId || !subject.trim() || !body.trim()) return;
-    const lead = leads.find(l => l.id === toLeadId);
-    if (!lead) return;
-    const threadId = `t-${Date.now()}`;
-    const email: EmailMessage = {
-      id: `e-${Date.now()}`,
-      leadId: toLeadId,
-      from: user!.email,
-      to: lead.email,
-      subject: subject.trim(),
-      body: body.trim(),
-      sentAt: new Date().toISOString(),
-      read: true,
-      direction: 'outbound',
-      threadId,
-    };
-    addEmail(email);
-    addActivity({
-      id: `a-${Date.now()}`,
-      leadId: toLeadId,
-      userId: user!.id,
-      type: 'email_sent',
-      description: `Sent email: "${subject.trim()}"`,
-      timestamp: new Date().toISOString(),
-    });
-    setToLeadId('');
-    setToSearch('');
-    setSubject('');
-    setBody('');
-    setTab('inbox');
+  const handleSendEmail = async () => {
+    const recipientEmail = toLeadId
+      ? leads.find(l => l.id === toLeadId)?.email
+      : toEmail;
+    if (!recipientEmail || !subject.trim() || !body.trim()) return;
+    if (!user?.sendingEmail) {
+      toast.error('Set your sending email in Settings before sending');
+      return;
+    }
+
+    try {
+      await sendEmail({
+        leadId: toLeadId || undefined,
+        from: user.sendingEmail,
+        fromName: user.name,
+        to: recipientEmail,
+        subject: subject.trim(),
+        body: body.trim(),
+        threadId: `t-${Date.now()}`,
+      });
+      if (toLeadId) {
+        addActivity({
+          leadId: toLeadId,
+          userId: user.id,
+          type: 'email_sent',
+          description: `Sent email: "${subject.trim()}"`,
+          timestamp: new Date().toISOString(),
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ['emails'] });
+      setToSearch('');
+      setToLeadId('');
+      setToEmail('');
+      setSubject('');
+      setBody('');
+      toast.success('Email sent');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send email');
+    }
   };
 
-  const handleSendCampaign = () => {
+  const handleSendCampaign = async () => {
     if (selectedLeadIds.size === 0 || !campaignSubject.trim() || !campaignBody.trim()) return;
-    const recipientIds = Array.from(selectedLeadIds);
+    if (!user?.sendingEmail) {
+      toast.error('Set your sending email in Settings before sending');
+      return;
+    }
+    const safeIds = new Set(emailSafeLeads.map(l => l.id));
+    const recipientIds = Array.from(selectedLeadIds).filter(id => safeIds.has(id));
     const now = new Date().toISOString();
 
-    const campaign = {
-      id: `camp-${Date.now()}`,
-      subject: campaignSubject.trim(),
-      body: campaignBody.trim(),
-      recipientIds,
-      sentAt: now,
-      sentBy: user!.id,
-    };
-    addCampaign(campaign);
-
-    recipientIds.forEach((leadId, i) => {
-      const lead = leads.find(l => l.id === leadId);
-      if (!lead) return;
-      addEmail({
-        id: `e-camp-${Date.now()}-${i}`,
-        leadId,
-        from: user!.email,
-        to: lead.email,
-        subject: campaignSubject.trim().replace('{{firstName}}', lead.firstName).replace('{{company}}', lead.company),
-        body: campaignBody.trim().replace(/\{\{firstName\}\}/g, lead.firstName).replace(/\{\{company\}\}/g, lead.company),
+    try {
+      await addCampaignAsync({
+        subject: campaignSubject.trim(),
+        body: campaignBody.trim(),
+        recipientIds,
         sentAt: now,
-        read: true,
-        direction: 'outbound',
-        threadId: `t-camp-${Date.now()}-${i}`,
+        sentBy: user!.id,
       });
-      addActivity({
-        id: `a-camp-${Date.now()}-${i}`,
-        leadId,
-        userId: user!.id,
-        type: 'email_sent',
-        description: `Campaign email: "${campaignSubject.trim()}"`,
-        timestamp: now,
-      });
-    });
 
-    setCampaignSubject('');
-    setCampaignBody('');
-    setSelectedLeadIds(new Set());
-    setCampaignStep('select');
+      // Send via Resend batch API instead of individual DB inserts
+      const campaignEmails = recipientIds.map(leadId => {
+        const lead = leads.find(l => l.id === leadId);
+        if (!lead) return null;
+        return {
+          leadId,
+          from: user!.sendingEmail!,
+          fromName: user!.name,
+          to: lead.email,
+          subject: campaignSubject.trim()
+            .replace('{{firstName}}', lead.firstName)
+            .replace('{{company}}', lead.company),
+          body: campaignBody.trim()
+            .replace(/\{\{firstName\}\}/g, lead.firstName)
+            .replace(/\{\{company\}\}/g, lead.company),
+          threadId: `t-camp-${Date.now()}-${leadId}`,
+        };
+      }).filter(Boolean) as Array<{leadId: string; from: string; fromName: string; to: string; subject: string; body: string; threadId: string}>;
+
+      const result = await sendBulkEmails(campaignEmails);
+      if (result?.failedCount > 0) {
+        toast.warning(`${result.failedCount} of ${campaignEmails.length} emails failed to send`);
+      }
+
+      // Log activities for sent emails
+      for (const leadId of recipientIds) {
+        addActivity({
+          leadId,
+          userId: user!.id,
+          type: 'email_sent',
+          description: `Campaign email: "${campaignSubject.trim()}"`,
+          timestamp: now,
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['emails'] });
+      setCampaignSubject('');
+      setCampaignBody('');
+      setSelectedLeadIds(new Set());
+      setCampaignStep('select');
+      toast.success(`Campaign sent to ${campaignEmails.length} recipients`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send campaign');
+    }
   };
 
   const handleRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
+    queryClient.invalidateQueries({ queryKey: ['emails'] }).then(() => setRefreshing(false));
   };
 
   const getContactName = (email: string) => {
     const lead = leads.find(l => l.email === email);
     if (lead) return `${lead.firstName} ${lead.lastName}`;
-    const usr = mockUsers.find(u => u.email === email);
+    const usr = profiles.find(u => u.email === email);
     if (usr) return usr.name;
     return email.split('@')[0];
   };
@@ -301,7 +371,7 @@ export default function OutreachPage() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const isOwnEmail = (email: string) => mockUsers.some(u => u.email === email);
+  const isOwnEmail = (email: string) => profiles.some(u => u.email === email);
 
   return (
     <div className="p-6 max-w-[1200px] space-y-4">
@@ -337,6 +407,39 @@ export default function OutreachPage() {
           </div>
 
           <div className="flex border rounded-lg bg-background overflow-hidden" style={{ height: 'calc(100vh - 240px)', minHeight: '500px' }}>
+            {/* Folder sidebar */}
+            <div className="hidden md:flex flex-col border-r w-[52px] min-w-[52px] py-2 gap-1 items-center">
+              <button
+                onClick={() => { setInboxFolder('inbox'); setSelectedThreadId(null); }}
+                className={`flex flex-col items-center gap-0.5 px-2 py-2 rounded-md text-[10px] w-full transition-colors ${
+                  inboxFolder === 'inbox' ? 'bg-accent text-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50'
+                }`}
+                title="Inbox"
+              >
+                <Inbox className="h-4 w-4" />
+                <span>Inbox</span>
+              </button>
+              <button
+                onClick={() => { setInboxFolder('sent'); setSelectedThreadId(null); }}
+                className={`flex flex-col items-center gap-0.5 px-2 py-2 rounded-md text-[10px] w-full transition-colors ${
+                  inboxFolder === 'sent' ? 'bg-accent text-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50'
+                }`}
+                title="Sent"
+              >
+                <ArrowUpRight className="h-4 w-4" />
+                <span>Sent</span>
+              </button>
+              <button
+                onClick={() => { setInboxFolder('all'); setSelectedThreadId(null); }}
+                className={`flex flex-col items-center gap-0.5 px-2 py-2 rounded-md text-[10px] w-full transition-colors ${
+                  inboxFolder === 'all' ? 'bg-accent text-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50'
+                }`}
+                title="All Mail"
+              >
+                <Layers className="h-4 w-4" />
+                <span>All</span>
+              </button>
+            </div>
             {/* Thread list */}
             <div className={`${selectedThread ? 'hidden md:flex' : 'flex'} flex-col border-r w-full md:w-[360px] md:min-w-[360px]`}>
               <ScrollArea className="flex-1">
@@ -379,9 +482,14 @@ export default function OutreachPage() {
                             <p className="text-xs text-muted-foreground truncate mt-0.5">
                               {latestMsg.direction === 'outbound' ? 'You: ' : ''}{latestMsg.body.split('\n')[0].slice(0, 80)}
                             </p>
-                            {thread.messages.length > 1 && (
-                              <span className="text-[11px] text-muted-foreground">{thread.messages.length} messages</span>
-                            )}
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {thread.messages.length > 1 && (
+                                <span className="text-[11px] text-muted-foreground">{thread.messages.length} messages</span>
+                              )}
+                              {thread.messages.some(m => m.direction === 'outbound' && m.openedAt) && (
+                                <Eye className="h-3 w-3 text-emerald-500 flex-shrink-0" title="Opened" />
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -410,28 +518,52 @@ export default function OutreachPage() {
 
                   {/* Messages */}
                   <ScrollArea className="flex-1 px-5 py-4">
-                    <div className="space-y-4 max-w-[640px]">
+                    <div className="space-y-4">
                       {selectedThread.messages.map(msg => {
                         const isSent = msg.direction === 'outbound';
                         return (
-                          <div key={msg.id} className={`flex flex-col ${isSent ? 'items-end' : 'items-start'}`}>
-                            <div className={`max-w-[85%] rounded-lg px-4 py-3 ${
-                              isSent
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-muted text-foreground'
-                            }`}>
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <span className={`text-xs font-medium ${isSent ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
-                                  {isSent ? 'You' : getContactName(msg.from)}
-                                </span>
-                                <span className={`text-[11px] ${isSent ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
-                                  {new Date(msg.sentAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                          <div key={msg.id} className={`rounded-lg border ${isSent ? 'bg-background' : 'bg-muted/30'}`}>
+                            <div className="px-4 py-2.5 border-b bg-muted/20">
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs">
+                                  <span className="text-muted-foreground">From: </span>
+                                  <span className="font-medium text-foreground">
+                                    {isSent ? `${user?.name ?? ''} <${user?.sendingEmail ?? msg.from}>`.trim() : msg.from}
+                                  </span>
+                                </div>
+                                <span className="text-[11px] text-muted-foreground">
+                                  {new Date(msg.sentAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
                                 </span>
                               </div>
-                              <p className={`text-sm whitespace-pre-line leading-relaxed ${isSent ? 'text-primary-foreground' : 'text-foreground'}`}>
+                              <div className="text-xs mt-0.5">
+                                <span className="text-muted-foreground">To: </span>
+                                <span className="text-foreground">{msg.to || '—'}</span>
+                              </div>
+                            </div>
+                            <div className="px-4 py-3">
+                              <p className="text-sm whitespace-pre-line leading-relaxed text-foreground">
                                 {msg.body}
                               </p>
                             </div>
+                            {msg.direction === 'outbound' && (msg.openedAt || msg.clickedAt || msg.bouncedAt) && (
+                              <div className="px-4 pb-2.5 flex items-center gap-3 border-t pt-2">
+                                {msg.openedAt && (
+                                  <span className="flex items-center gap-0.5 text-[10px] text-emerald-600" title={`Opened ${new Date(msg.openedAt).toLocaleString()}`}>
+                                    <Eye className="h-3 w-3" /> Opened
+                                  </span>
+                                )}
+                                {msg.clickedAt && (
+                                  <span className="flex items-center gap-0.5 text-[10px] text-blue-600" title={`Clicked ${new Date(msg.clickedAt).toLocaleString()}`}>
+                                    <MousePointerClick className="h-3 w-3" /> Clicked
+                                  </span>
+                                )}
+                                {msg.bouncedAt && (
+                                  <span className="flex items-center gap-0.5 text-[10px] text-red-500" title={`Bounced ${new Date(msg.bouncedAt).toLocaleString()}`}>
+                                    <AlertTriangle className="h-3 w-3" /> Bounced
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -459,11 +591,25 @@ export default function OutreachPage() {
                             Cancel
                           </Button>
                         </div>
+                        <div className="flex items-center gap-0.5 px-2 py-1.5 border rounded-t-md bg-muted/30 border-b-0">
+                          <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Bold" onMouseDown={e => e.preventDefault()}>
+                            <Bold className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Italic" onMouseDown={e => e.preventDefault()}>
+                            <Italic className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Link" onMouseDown={e => e.preventDefault()}>
+                            <Link2 className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="List" onMouseDown={e => e.preventDefault()}>
+                            <List className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                         <Textarea
                           placeholder={replyMode === 'reply' ? 'Type your reply...' : 'Add a message...'}
                           value={replyBody}
                           onChange={e => setReplyBody(e.target.value)}
-                          className="min-h-[100px]"
+                          className="min-h-[100px] rounded-t-none"
                           autoFocus
                         />
                         <Button
@@ -498,27 +644,36 @@ export default function OutreachPage() {
                 <label className="text-sm font-medium">To</label>
                 <div className="relative">
                   <Input
-                    placeholder="Search for a lead by name, email, or company..."
-                    value={toLeadId ? `${leads.find(l => l.id === toLeadId)?.firstName} ${leads.find(l => l.id === toLeadId)?.lastName} — ${leads.find(l => l.id === toLeadId)?.email}` : toSearch}
-                    onChange={e => { setToSearch(e.target.value); setToLeadId(''); }}
-                    onFocus={() => { if (toLeadId) { setToSearch(''); setToLeadId(''); } }}
+                    placeholder="Search leads or type an email address..."
+                    value={toLeadId ? `${leads.find(l => l.id === toLeadId)?.firstName} ${leads.find(l => l.id === toLeadId)?.lastName} — ${leads.find(l => l.id === toLeadId)?.email}` : (toEmail && !toSearch) ? toEmail : toSearch}
+                    onChange={e => { setToSearch(e.target.value); setToLeadId(''); setToEmail(''); if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.target.value.trim())) { setToEmail(e.target.value.trim()); } }}
+                    onFocus={() => { if (toLeadId || toEmail) { setToSearch(''); setToLeadId(''); setToEmail(''); } }}
                   />
                   {!toLeadId && toSearch && (
                     <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-background border rounded-md shadow-lg max-h-[200px] overflow-y-auto">
-                      {filteredComposeLeads.length === 0 ? (
+                      {toEmail && (
+                        <div
+                          className="px-3 py-2 text-sm cursor-pointer hover:bg-accent transition-colors border-b"
+                          onClick={() => { setToSearch(''); }}
+                        >
+                          <Mail className="h-3.5 w-3.5 inline mr-1.5 text-primary" />
+                          <span className="font-medium text-foreground">Send to: </span>
+                          <span className="text-primary">{toEmail}</span>
+                        </div>
+                      )}
+                      {filteredComposeLeads.map(l => (
+                        <div
+                          key={l.id}
+                          className="px-3 py-2 text-sm cursor-pointer hover:bg-accent transition-colors"
+                          onClick={() => { setToLeadId(l.id); setToSearch(''); }}
+                        >
+                          <span className="font-medium text-foreground">{l.firstName} {l.lastName}</span>
+                          <span className="text-muted-foreground"> — {l.email}</span>
+                          <span className="text-muted-foreground text-xs ml-1">({l.company})</span>
+                        </div>
+                      ))}
+                      {filteredComposeLeads.length === 0 && !toEmail && (
                         <div className="px-3 py-2 text-sm text-muted-foreground">No leads found</div>
-                      ) : (
-                        filteredComposeLeads.map(l => (
-                          <div
-                            key={l.id}
-                            className="px-3 py-2 text-sm cursor-pointer hover:bg-accent transition-colors"
-                            onClick={() => { setToLeadId(l.id); setToSearch(''); }}
-                          >
-                            <span className="font-medium text-foreground">{l.firstName} {l.lastName}</span>
-                            <span className="text-muted-foreground"> — {l.email}</span>
-                            <span className="text-muted-foreground text-xs ml-1">({l.company})</span>
-                          </div>
-                        ))
                       )}
                     </div>
                   )}
@@ -530,9 +685,23 @@ export default function OutreachPage() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Body</label>
-                <Textarea placeholder="Write your email..." value={body} onChange={e => setBody(e.target.value)} className="min-h-[200px]" />
+                <div className="flex items-center gap-0.5 px-2 py-1.5 border rounded-t-md bg-muted/30 border-b-0">
+                  <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Bold" onMouseDown={e => e.preventDefault()}>
+                    <Bold className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Italic" onMouseDown={e => e.preventDefault()}>
+                    <Italic className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Link" onMouseDown={e => e.preventDefault()}>
+                    <Link2 className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="List" onMouseDown={e => e.preventDefault()}>
+                    <List className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <Textarea placeholder="Write your email..." value={body} onChange={e => setBody(e.target.value)} className="min-h-[200px] rounded-t-none" />
               </div>
-              <Button onClick={handleSendEmail} disabled={!toLeadId || !subject.trim() || !body.trim()} className="gap-1.5">
+              <Button onClick={handleSendEmail} disabled={(!toLeadId && !toEmail) || !subject.trim() || !body.trim()} className="gap-1.5">
                 <Send className="h-4 w-4" /> Send Email
               </Button>
             </CardContent>
@@ -565,7 +734,7 @@ export default function OutreachPage() {
           {campaignMode === 'ai' && (
             <>
               <CampaignAIChat
-                leads={leads}
+                leads={emailSafeLeads}
                 industries={industries}
                 onApplyResult={(result) => {
                   setSelectedLeadIds(new Set(result.matchedLeadIds));
@@ -613,6 +782,11 @@ export default function OutreachPage() {
           {/* Manual Mode */}
           {campaignMode === 'manual' && campaignStep === 'select' && (
             <>
+              {leads.length > emailSafeLeads.length && (
+                <p className="text-xs text-muted-foreground">
+                  Showing {emailSafeLeads.length} of {leads.length} leads with verified email addresses
+                </p>
+              )}
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-semibold text-foreground">Select Recipients</h2>
                 <div className="flex items-center gap-2">
@@ -725,7 +899,7 @@ export default function OutreachPage() {
             ) : (
               <div className="space-y-2">
                 {campaigns.map(camp => {
-                  const sender = mockUsers.find(u => u.id === camp.sentBy);
+                  const sender = profiles.find(p => p.id === camp.sentBy);
                   const isExpanded = expandedCampaign === camp.id;
                   return (
                     <Card key={camp.id} className="border shadow-sm">
@@ -768,13 +942,13 @@ export default function OutreachPage() {
 
         {/* ===== SEQUENCES ===== */}
         <TabsContent value="sequences" className="mt-4 space-y-3">
-          {mockSequences.map(seq => (
+          {sequences.map(seq => (
             <Card key={seq.id} className="border shadow-sm">
               <CardContent className="p-5">
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <h3 className="text-sm font-semibold text-foreground">{seq.name}</h3>
-                    <p className="text-xs text-muted-foreground">{seq.steps.length} steps · Created by {mockUsers.find(u => u.id === seq.createdBy)?.name}</p>
+                    <p className="text-xs text-muted-foreground">{seq.steps.length} steps · Created by {profiles.find(p => p.id === seq.createdBy)?.name}</p>
                   </div>
                   <Badge variant={seq.active ? 'default' : 'secondary'}>{seq.active ? 'Active' : 'Paused'}</Badge>
                 </div>

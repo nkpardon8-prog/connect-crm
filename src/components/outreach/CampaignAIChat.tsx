@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Send, Bot, User } from 'lucide-react';
 import type { Lead } from '@/types/crm';
-import type { LeadStatus } from '@/types/crm';
+import { generateCampaignCopy } from '@/lib/api/campaign-ai';
 
 interface ChatMessage {
   id: string;
@@ -11,81 +11,16 @@ interface ChatMessage {
   content: string;
 }
 
-interface AIResult {
-  matchedLeadIds: string[];
-  subject: string;
-  body: string;
-  statusFilter?: string;
-  industryFilter?: string;
-}
-
 interface CampaignAIChatProps {
   leads: Lead[];
   industries: string[];
-  onApplyResult: (result: AIResult) => void;
-}
-
-const STATUS_KEYWORDS: LeadStatus[] = ['cold', 'lukewarm', 'warm', 'dead'];
-
-function parsePrompt(prompt: string, leads: Lead[], industries: string[]): AIResult {
-  const lower = prompt.toLowerCase();
-
-  // Match status
-  const matchedStatus = STATUS_KEYWORDS.find(s => lower.includes(s));
-
-  // Match industry (case-insensitive)
-  const matchedIndustry = industries.find(ind => lower.includes(ind.toLowerCase()));
-
-  // Filter leads
-  let filtered = [...leads];
-  if (matchedStatus) {
-    filtered = filtered.filter(l => l.status === matchedStatus);
-  }
-  if (matchedIndustry) {
-    filtered = filtered.filter(l => l.industry.toLowerCase() === matchedIndustry.toLowerCase());
-  }
-
-  const matchedLeadIds = filtered.map(l => l.id);
-
-  // Extract topic from prompt — strip known keywords to find the core message
-  let topic = prompt;
-  STATUS_KEYWORDS.forEach(s => { topic = topic.replace(new RegExp(s, 'gi'), ''); });
-  industries.forEach(ind => { topic = topic.replace(new RegExp(ind, 'gi'), ''); });
-  topic = topic.replace(/\b(send|email|outreach|campaign|all|leads|to|a|an|the|about|introducing|our|for|with)\b/gi, '').trim();
-  if (!topic) topic = 'our services';
-
-  const subject = `Introducing ${topic} — let's connect, {{firstName}}`;
-  const body = `Hi {{firstName}},\n\nI came across {{company}} and thought you'd be interested in ${topic}.\n\nWe've been helping companies in your space achieve meaningful results, and I'd love to explore how we can do the same for your team.\n\nWould you be open to a quick call this week?\n\nBest regards`;
-
-  return {
-    matchedLeadIds,
-    subject,
-    body,
-    statusFilter: matchedStatus ?? undefined,
-    industryFilter: matchedIndustry ?? undefined,
-  };
-}
-
-function buildAssistantMessage(result: AIResult, leads: Lead[]): string {
-  const parts: string[] = [];
-
-  if (result.statusFilter || result.industryFilter) {
-    const filters: string[] = [];
-    if (result.statusFilter) filters.push(`status: **${result.statusFilter}**`);
-    if (result.industryFilter) filters.push(`industry: **${result.industryFilter}**`);
-    parts.push(`Filtered by ${filters.join(' and ')}.`);
-  }
-
-  parts.push(`Selected **${result.matchedLeadIds.length}** recipients.`);
-  parts.push(`Subject and body have been auto-filled with merge fields.`);
-
-  if (result.matchedLeadIds.length === 0) {
-    parts.push(`\nNo leads matched your criteria — try broadening your filters or describe your audience differently.`);
-  } else {
-    parts.push(`\nYou can refine by sending another message, e.g. "make it shorter" or "also include warm leads".`);
-  }
-
-  return parts.join(' ');
+  onApplyResult: (result: {
+    matchedLeadIds: string[];
+    subject: string;
+    body: string;
+    statusFilter?: string;
+    industryFilter?: string;
+  }) => void;
 }
 
 export default function CampaignAIChat({ leads, industries, onApplyResult }: CampaignAIChatProps) {
@@ -104,25 +39,73 @@ export default function CampaignAIChat({ leads, industries, onApplyResult }: Cam
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text || isThinking) return;
+
+    // Snapshot messages BEFORE adding user message to avoid chat history duplication
+    const currentMessages = [...messages];
 
     const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: 'user', content: text };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsThinking(true);
 
-    // Simulate slight delay for realism
-    setTimeout(() => {
-      const result = parsePrompt(text, leads, industries);
-      const reply = buildAssistantMessage(result, leads);
-      const assistantMsg: ChatMessage = { id: `a-${Date.now()}`, role: 'assistant', content: reply };
+    try {
+      // Prepare lead summaries — strip sensitive fields (no emails, phones)
+      const leadSummaries = leads.map(l => ({
+        id: l.id,
+        firstName: l.firstName,
+        lastName: l.lastName,
+        company: l.company,
+        industry: l.industry,
+        status: l.status,
+        jobTitle: l.jobTitle,
+        location: l.location,
+      }));
 
+      // Build chat history from snapshot (exclude welcome message)
+      const chatHistory = currentMessages
+        .filter(m => m.id !== 'welcome')
+        .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+
+      const result = await generateCampaignCopy({
+        prompt: text,
+        leads: leadSummaries,
+        industries,
+        chatHistory,
+      });
+
+      const assistantMsg: ChatMessage = {
+        id: `a-${Date.now()}`,
+        role: 'assistant',
+        content: result.explanation,
+      };
       setMessages(prev => [...prev, assistantMsg]);
+
+      // Map to onApplyResult format:
+      // - Empty matchedLeadIds [] means "all leads" → pass all lead IDs
+      // - Empty string statusFilter/industryFilter → undefined
+      onApplyResult({
+        matchedLeadIds: result.matchedLeadIds.length > 0
+          ? result.matchedLeadIds
+          : leads.map(l => l.id),
+        subject: result.subject,
+        body: result.body,
+        statusFilter: result.statusFilter || undefined,
+        industryFilter: result.industryFilter || undefined,
+      });
+    } catch (err) {
+      console.error('Campaign AI error:', err);
+      const errorMsg: ChatMessage = {
+        id: `e-${Date.now()}`,
+        role: 'assistant',
+        content: 'Sorry, I had trouble generating that campaign. Please try again.',
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
       setIsThinking(false);
-      onApplyResult(result);
-    }, 600);
+    }
   };
 
   return (
@@ -172,7 +155,7 @@ export default function CampaignAIChat({ leads, industries, onApplyResult }: Cam
           placeholder="Describe your campaign..."
           value={input}
           onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
+          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && !isThinking && handleSend()}
           className="h-9"
         />
         <Button size="sm" onClick={handleSend} disabled={!input.trim() || isThinking} className="gap-1.5 h-9 px-3">

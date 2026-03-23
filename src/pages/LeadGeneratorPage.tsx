@@ -1,13 +1,25 @@
 import { useState } from 'react';
-import { useCRM } from '@/contexts/CRMContext';
+import { useLeads } from '@/hooks/use-leads';
 import { useAuth } from '@/contexts/AuthContext';
+import { searchApollo } from '@/lib/api/apollo';
 import type { Lead } from '@/types/crm';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Sparkles, Send, Bot, User as UserIcon, Import } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Sparkles, Send, Bot, User as UserIcon, Import, Mail, Phone } from 'lucide-react';
 
 interface ChatMessage {
   role: 'user' | 'bot';
@@ -15,59 +27,82 @@ interface ChatMessage {
   leads?: Lead[];
 }
 
-const fakeGeneratedLeads = (prompt: string): Lead[] => {
-  const id = Date.now().toString();
-  return [
-    { id: `gen-${id}-1`, firstName: 'Alex', lastName: 'Werner', email: 'awerner@scalegrid.io', phone: '+14155559001', jobTitle: 'CTO', company: 'ScaleGrid', companySize: '51-200', industry: 'SaaS', location: 'Austin, TX', status: 'cold', assignedTo: '', createdAt: new Date().toISOString(), lastContactedAt: null, notes: `Generated from: "${prompt}"`, tags: ['generated'] },
-    { id: `gen-${id}-2`, firstName: 'Monica', lastName: 'Tan', email: 'mtan@cloudpeak.dev', phone: '+12065559002', jobTitle: 'VP Engineering', company: 'CloudPeak', companySize: '201-500', industry: 'Cloud', location: 'Seattle, WA', status: 'cold', assignedTo: '', createdAt: new Date().toISOString(), lastContactedAt: null, notes: `Generated from: "${prompt}"`, tags: ['generated'] },
-    { id: `gen-${id}-3`, firstName: 'Raj', lastName: 'Gupta', email: 'rgupta@dataflow.com', phone: '+16505559003', jobTitle: 'Director of Engineering', company: 'DataFlow Inc', companySize: '51-200', industry: 'Data', location: 'San Jose, CA', status: 'cold', assignedTo: '', createdAt: new Date().toISOString(), lastContactedAt: null, notes: `Generated from: "${prompt}"`, tags: ['generated'] },
-    { id: `gen-${id}-4`, firstName: 'Sarah', lastName: 'Kim', email: 'skim@nexgenapi.co', phone: '+13125559004', jobTitle: 'CTO', company: 'NexGen API', companySize: '11-50', industry: 'API Platform', location: 'Chicago, IL', status: 'cold', assignedTo: '', createdAt: new Date().toISOString(), lastContactedAt: null, notes: `Generated from: "${prompt}"`, tags: ['generated'] },
-    { id: `gen-${id}-5`, firstName: 'Derek', lastName: 'Olson', email: 'dolson@vertexsaas.com', phone: '+17375559005', jobTitle: 'Head of Platform', company: 'Vertex SaaS', companySize: '201-500', industry: 'SaaS', location: 'Salt Lake City, UT', status: 'cold', assignedTo: '', createdAt: new Date().toISOString(), lastContactedAt: null, notes: `Generated from: "${prompt}"`, tags: ['generated'] },
-  ];
-};
-
 export default function LeadGeneratorPage() {
-  const { addLeads } = useCRM();
+  const { addLeads } = useLeads();
   const { user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'bot', content: 'Describe your ideal customer profile and I\'ll generate a lead list from Apollo.io. For example: "CTOs at SaaS companies, 50-200 employees, based in Austin"' },
+    { role: 'bot', content: 'Describe your ideal customer profile and I\'ll search Apollo.io for matching contacts with verified contact information.\n\nFor example: "CTOs at SaaS companies, 50-200 employees, based in Austin"' },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [importedSets, setImportedSets] = useState<Set<number>>(new Set());
+  const [selectedCount, setSelectedCount] = useState(25);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [pendingPrompt, setPendingPrompt] = useState('');
+
+  const estimatedCredits = Math.min(selectedCount * 2, 50);
 
   const handleSend = () => {
     if (!input.trim() || loading) return;
-    const userMsg: ChatMessage = { role: 'user', content: input.trim() };
+    setPendingPrompt(input.trim());
+    setShowConfirm(true);
+  };
+
+  const executeSearch = async () => {
+    setShowConfirm(false);
+    const userMsg: ChatMessage = { role: 'user', content: pendingPrompt };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setLoading(true);
 
-    setTimeout(() => {
-      const generated = fakeGeneratedLeads(userMsg.content);
+    try {
+      const result = await searchApollo(pendingPrompt, selectedCount);
+
+      const botContent = result.leads.length > 0
+        ? `Found ${result.totalFound.toLocaleString()} total matches. Showing ${result.leads.length} enriched contacts with verified contact info (${result.creditsUsed} credits used).`
+        : 'No matching contacts found with verified contact information. Try broadening your search criteria.';
+
       const botMsg: ChatMessage = {
         role: 'bot',
-        content: `Found ${generated.length} contacts matching your criteria. Here's the list:`,
-        leads: generated,
+        content: botContent,
+        leads: result.leads.length > 0 ? result.leads : undefined,
       };
       setMessages(prev => [...prev, botMsg]);
+    } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : 'An unexpected error occurred';
+      setMessages(prev => [...prev, { role: 'bot', content: `Error: ${errorMsg}` }]);
+    } finally {
       setLoading(false);
-    }, 1500);
+    }
   };
 
   const handleImport = (leads: Lead[], msgIndex: number) => {
-    const assignedLeads = leads.map(l => ({ ...l, assignedTo: user!.id }));
-    addLeads(assignedLeads);
+    const cleanedLeads = leads.map(({ id, createdAt, ...rest }) => ({
+      ...rest,
+      assignedTo: user!.id,
+    }));
+    addLeads(cleanedLeads);
     setImportedSets(prev => new Set([...prev, msgIndex]));
   };
 
+  const contactBadge = (lead: Lead) => {
+    const hasEmail = !!lead.email;
+    const hasPhone = !!lead.phone;
+    if (hasEmail && hasPhone) return <Badge variant="secondary" className="text-[10px] bg-emerald-50 text-emerald-700">Both</Badge>;
+    if (hasEmail) return <Badge variant="secondary" className="text-[10px] bg-blue-50 text-blue-700">Email</Badge>;
+    if (hasPhone) return <Badge variant="secondary" className="text-[10px] bg-amber-50 text-amber-700">Phone</Badge>;
+    return null;
+  };
+
   return (
-    <div className="p-6 max-w-[900px] mx-auto flex flex-col" style={{ height: 'calc(100vh - 3.5rem)' }}>
-      <div className="mb-4">
-        <h1 className="text-2xl font-semibold text-foreground flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-primary" /> Lead Generator
-        </h1>
-        <p className="text-sm text-muted-foreground">Describe your ideal customers to generate leads via Apollo.io</p>
+    <div className="p-6 max-w-[1000px] mx-auto flex flex-col" style={{ height: 'calc(100vh - 3.5rem)' }}>
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" /> Lead Generator
+          </h1>
+          <p className="text-sm text-muted-foreground">Describe your ideal customers to discover leads via Apollo.io</p>
+        </div>
       </div>
 
       {/* Chat area */}
@@ -80,8 +115,8 @@ export default function LeadGeneratorPage() {
                   <Bot className="h-4 w-4 text-primary" />
                 </div>
               )}
-              <div className={`max-w-[80%] space-y-3 ${msg.role === 'user' ? 'order-first' : ''}`}>
-                <div className={`rounded-lg px-4 py-2.5 text-sm ${msg.role === 'user' ? 'bg-primary text-primary-foreground ml-auto' : 'bg-muted'}`}>
+              <div className={`max-w-[90%] space-y-3 ${msg.role === 'user' ? 'order-first' : ''}`}>
+                <div className={`rounded-lg px-4 py-2.5 text-sm whitespace-pre-line ${msg.role === 'user' ? 'bg-primary text-primary-foreground ml-auto' : 'bg-muted'}`}>
                   {msg.content}
                 </div>
                 {msg.leads && (
@@ -92,7 +127,10 @@ export default function LeadGeneratorPage() {
                           <TableHead className="text-xs">Name</TableHead>
                           <TableHead className="text-xs">Title</TableHead>
                           <TableHead className="text-xs">Company</TableHead>
+                          <TableHead className="text-xs">Email</TableHead>
+                          <TableHead className="text-xs">Phone</TableHead>
                           <TableHead className="text-xs">Location</TableHead>
+                          <TableHead className="text-xs w-[50px]">Contact</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -101,7 +139,22 @@ export default function LeadGeneratorPage() {
                             <TableCell className="text-xs font-medium">{l.firstName} {l.lastName}</TableCell>
                             <TableCell className="text-xs">{l.jobTitle}</TableCell>
                             <TableCell className="text-xs">{l.company}</TableCell>
+                            <TableCell className="text-xs truncate max-w-[150px]">
+                              {l.email ? (
+                                <span className="flex items-center gap-1"><Mail className="h-3 w-3 text-muted-foreground" />{l.email}</span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              {l.phone ? (
+                                <span className="flex items-center gap-1"><Phone className="h-3 w-3 text-muted-foreground" />{l.phone}</span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
                             <TableCell className="text-xs">{l.location}</TableCell>
+                            <TableCell className="text-xs">{contactBadge(l)}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -133,7 +186,7 @@ export default function LeadGeneratorPage() {
                 <Bot className="h-4 w-4 text-primary" />
               </div>
               <div className="rounded-lg bg-muted px-4 py-2.5 text-sm text-muted-foreground">
-                Searching Apollo.io for matching contacts...
+                Searching Apollo.io and enriching contacts...
               </div>
             </div>
           )}
@@ -148,12 +201,39 @@ export default function LeadGeneratorPage() {
               onChange={e => setInput(e.target.value)}
               className="flex-1"
             />
+            <Select value={String(selectedCount)} onValueChange={v => setSelectedCount(Number(v))}>
+              <SelectTrigger className="w-[80px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+              </SelectContent>
+            </Select>
             <Button type="submit" disabled={!input.trim() || loading} size="icon">
               <Send className="h-4 w-4" />
             </Button>
           </form>
         </div>
       </Card>
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Search Apollo.io</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will search for up to {selectedCount} leads and enrich up to {estimatedCredits} contacts to find verified contact information.
+              Approximately <strong>{estimatedCredits} Apollo credits</strong> will be used.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={executeSearch}>Search</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

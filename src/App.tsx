@@ -4,7 +4,6 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { CRMProvider } from "@/contexts/CRMContext";
 import LoginPage from "@/pages/LoginPage";
 import AppLayout from "@/components/AppLayout";
 import DashboardPage from "@/pages/DashboardPage";
@@ -19,25 +18,33 @@ import NotFound from "@/pages/NotFound";
 const queryClient = new QueryClient();
 
 function AuthGate() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center animate-pulse">
+          <span className="text-primary-foreground font-bold text-sm">I</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) return <LoginPage />;
 
   return (
-    <CRMProvider>
-      <Routes>
-        <Route element={<AppLayout />}>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/leads" element={<LeadsPage />} />
-          <Route path="/leads/:id" element={<LeadDetailPage />} />
-          <Route path="/generator" element={<LeadGeneratorPage />} />
-          <Route path="/outreach" element={<OutreachPage />} />
-          <Route path="/pipeline" element={<PipelinePage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Route>
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </CRMProvider>
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/leads" element={<LeadsPage />} />
+        <Route path="/leads/:id" element={<LeadDetailPage />} />
+        <Route path="/generator" element={<LeadGeneratorPage />} />
+        <Route path="/outreach" element={<OutreachPage />} />
+        <Route path="/pipeline" element={<PipelinePage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+      </Route>
+      <Route path="*" element={<NotFound />} />
+    </Routes>
   );
 }
 

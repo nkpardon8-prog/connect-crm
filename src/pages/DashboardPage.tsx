@@ -1,4 +1,7 @@
-import { useCRM } from '@/contexts/CRMContext';
+import { useLeads } from '@/hooks/use-leads';
+import { useActivities } from '@/hooks/use-activities';
+import { useDeals } from '@/hooks/use-deals';
+import { useProfiles } from '@/hooks/use-profiles';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,25 +16,32 @@ const statusColors: Record<string, string> = {
 };
 
 export default function DashboardPage() {
-  const { leads, activities, deals } = useCRM();
+  const { leads, isLoading: leadsLoading } = useLeads();
+  const { activities, isLoading: activitiesLoading } = useActivities();
+  const { deals, isLoading: dealsLoading } = useDeals();
+  const { profiles } = useProfiles();
   const { user, isAdmin } = useAuth();
 
-  const myLeads = isAdmin ? leads : leads.filter(l => l.assignedTo === user?.id);
-  const myActivities = isAdmin ? activities : activities.filter(a => a.userId === user?.id);
-  const myDeals = isAdmin ? deals : deals.filter(d => d.assignedTo === user?.id);
+  if (leadsLoading || activitiesLoading || dealsLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[50vh]">
+        <div className="text-sm text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
 
-  const totalLeads = myLeads.length;
-  const callsMade = myActivities.filter(a => a.type === 'call').length;
-  const emailsSent = myActivities.filter(a => a.type === 'email_sent').length;
-  const warmLeads = myLeads.filter(l => l.status === 'warm').length;
+  const totalLeads = leads.length;
+  const callsMade = activities.filter(a => a.type === 'call').length;
+  const emailsSent = activities.filter(a => a.type === 'email_sent').length;
+  const warmLeads = leads.filter(l => l.status === 'warm').length;
   const conversionRate = totalLeads > 0 ? ((warmLeads / totalLeads) * 100).toFixed(1) : '0';
-  const pipelineValue = myDeals.filter(d => d.stage !== 'closed_lost').reduce((sum, d) => sum + d.value, 0);
+  const pipelineValue = deals.filter(d => d.stage !== 'closed_lost').reduce((sum, d) => sum + d.value, 0);
 
   const funnelData = [
-    { name: 'Cold', value: myLeads.filter(l => l.status === 'cold').length },
-    { name: 'Lukewarm', value: myLeads.filter(l => l.status === 'lukewarm').length },
-    { name: 'Warm', value: myLeads.filter(l => l.status === 'warm').length },
-    { name: 'Dead', value: myLeads.filter(l => l.status === 'dead').length },
+    { name: 'Cold', value: leads.filter(l => l.status === 'cold').length },
+    { name: 'Lukewarm', value: leads.filter(l => l.status === 'lukewarm').length },
+    { name: 'Warm', value: leads.filter(l => l.status === 'warm').length },
+    { name: 'Dead', value: leads.filter(l => l.status === 'dead').length },
   ];
 
   const weeklyActivity = [
@@ -168,10 +178,12 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {[
-                { name: 'Marcus Rivera', calls: 8, emails: 12, leads: leads.filter(l => l.assignedTo === 'u2').length },
-                { name: 'Aisha Patel', calls: 6, emails: 9, leads: leads.filter(l => l.assignedTo === 'u3').length },
-              ].map((rep, i) => (
+              {profiles.filter(p => p.role === 'employee').map((emp) => ({
+                name: emp.name,
+                calls: activities.filter(a => a.userId === emp.id && a.type === 'call').length,
+                emails: activities.filter(a => a.userId === emp.id && a.type === 'email_sent').length,
+                leads: leads.filter(l => l.assignedTo === emp.id).length,
+              })).map((rep) => (
                 <div key={rep.name} className="flex items-center gap-4 p-3 rounded-lg bg-muted/50">
                   <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-medium">
                     {rep.name.split(' ').map(n => n[0]).join('')}

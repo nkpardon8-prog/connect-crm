@@ -1,7 +1,9 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useCRM } from '@/contexts/CRMContext';
+import { useLeads } from '@/hooks/use-leads';
+import { useActivities } from '@/hooks/use-activities';
+import { useSuggestions } from '@/hooks/use-suggestions';
+import { useProfiles } from '@/hooks/use-profiles';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockUsers } from '@/data/mockData';
 import type { LeadStatus, ActivityType } from '@/types/crm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -30,21 +32,27 @@ const activityIcons: Record<ActivityType, React.ElementType> = {
 export default function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { leads, activities, suggestions, updateLead, addActivity, dismissSuggestion } = useCRM();
+  const { leads, updateLead, isLoading: leadsLoading } = useLeads();
+  const { activities, addActivity } = useActivities(id);
+  const { suggestions, dismissSuggestion } = useSuggestions(id);
+  const { profiles } = useProfiles();
   const { user } = useAuth();
   const [newNote, setNewNote] = useState('');
+
+  if (leadsLoading) {
+    return <div className="p-6 flex items-center justify-center min-h-[50vh]"><div className="text-sm text-muted-foreground">Loading...</div></div>;
+  }
 
   const lead = leads.find(l => l.id === id);
   if (!lead) return <div className="p-6">Lead not found</div>;
 
-  const leadActivities = activities.filter(a => a.leadId === id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  const leadSuggestions = suggestions.filter(s => s.leadId === id && !s.dismissed);
-  const assignedUser = mockUsers.find(u => u.id === lead.assignedTo);
+  const leadActivities = activities;
+  const leadSuggestions = suggestions;
+  const assignedUser = profiles.find(p => p.id === lead.assignedTo);
 
   const handleStatusChange = (status: LeadStatus) => {
     updateLead(lead.id, { status });
     addActivity({
-      id: `a-${Date.now()}`,
       leadId: lead.id,
       userId: user!.id,
       type: 'status_change',
@@ -56,7 +64,6 @@ export default function LeadDetailPage() {
   const handleAddNote = () => {
     if (!newNote.trim()) return;
     addActivity({
-      id: `a-${Date.now()}`,
       leadId: lead.id,
       userId: user!.id,
       type: 'note',
@@ -68,7 +75,6 @@ export default function LeadDetailPage() {
 
   const handleCall = () => {
     addActivity({
-      id: `a-${Date.now()}`,
       leadId: lead.id,
       userId: user!.id,
       type: 'call',
@@ -79,9 +85,25 @@ export default function LeadDetailPage() {
     window.location.href = `tel:${lead.phone}`;
   };
 
+  const emailStatusBadge = (status?: string) => {
+    switch (status) {
+      case 'verified':
+      case 'likely_to_engage':
+        return <Badge variant="secondary" className="text-[10px] bg-emerald-50 text-emerald-700">Verified</Badge>;
+      case 'guessed':
+      case 'extrapolated':
+        return <Badge variant="secondary" className="text-[10px] bg-amber-50 text-amber-700">Guessed</Badge>;
+      case 'invalid':
+        return <Badge variant="secondary" className="text-[10px] bg-red-50 text-red-700">Invalid</Badge>;
+      case 'unverified':
+        return <Badge variant="secondary" className="text-[10px] bg-slate-50 text-slate-500">Unverified</Badge>;
+      default:
+        return null;
+    }
+  };
+
   const handleEmailClick = () => {
     addActivity({
-      id: `a-${Date.now()}`,
       leadId: lead.id,
       userId: user!.id,
       type: 'email_sent',
@@ -135,9 +157,10 @@ export default function LeadDetailPage() {
                   <Phone className="h-4 w-4 flex-shrink-0" />
                   <span>{lead.phone}</span>
                 </button>
-                <button onClick={handleEmailClick} className="flex items-center gap-2 text-primary hover:underline w-full truncate">
+                <button onClick={handleEmailClick} className="flex items-center gap-2 text-primary hover:underline w-full min-w-0">
                   <Mail className="h-4 w-4 flex-shrink-0" />
-                  <span className="truncate">{lead.email}</span>
+                  <span className="truncate flex-1">{lead.email}</span>
+                  {emailStatusBadge(lead.emailStatus)}
                 </button>
                 {lead.linkedinUrl && (
                   <a href={lead.linkedinUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline">
@@ -207,7 +230,7 @@ export default function LeadDetailPage() {
                 <div className="space-y-0">
                   {leadActivities.map((act, i) => {
                     const Icon = activityIcons[act.type];
-                    const actUser = mockUsers.find(u => u.id === act.userId);
+                    const actUser = profiles.find(p => p.id === act.userId);
                     return (
                       <div key={act.id} className="flex gap-3 py-3 relative">
                         {i < leadActivities.length - 1 && (
