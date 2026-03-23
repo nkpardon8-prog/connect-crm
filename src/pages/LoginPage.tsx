@@ -93,10 +93,6 @@ export default function LoginPage() {
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? 'Signing in...' : 'Sign in'}
               </Button>
-              <div className="text-xs text-muted-foreground text-center space-y-1 pt-2">
-                <p><strong>Admin:</strong> sarah@integrateapi.ai / admin123</p>
-                <p><strong>Employee:</strong> marcus@integrateapi.ai / employee123</p>
-              </div>
             </form>
           ) : (
             <form onSubmit={handleSignup} className="space-y-4">
