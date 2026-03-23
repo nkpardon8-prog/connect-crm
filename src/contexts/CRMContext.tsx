@@ -15,6 +15,8 @@ interface CRMContextType {
   addActivity: (activity: Activity) => void;
   updateDeal: (id: string, updates: Partial<Deal>) => void;
   addEmail: (email: EmailMessage) => void;
+  markEmailRead: (id: string, read?: boolean) => void;
+  updateEmail: (id: string, updates: Partial<EmailMessage>) => void;
   dismissSuggestion: (id: string) => void;
   addCampaign: (campaign: Campaign) => void;
 }
