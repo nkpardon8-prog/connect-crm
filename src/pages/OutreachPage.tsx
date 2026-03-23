@@ -11,8 +11,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Send, RefreshCw, Inbox, PenLine, Layers, Clock, Mail, MailOpen, Megaphone, ArrowRight, ArrowLeft, Users, ChevronDown, ChevronRight } from 'lucide-react';
+import { Send, RefreshCw, Inbox, PenLine, Layers, Clock, Mail, MailOpen, Megaphone, ArrowRight, ArrowLeft, Users, ChevronDown, ChevronRight, Bot, Pencil } from 'lucide-react';
 import type { LeadStatus } from '@/types/crm';
+import CampaignAIChat from '@/components/outreach/CampaignAIChat';
 
 const statusColors: Record<LeadStatus, string> = {
   cold: 'bg-blue-100 text-blue-700',
