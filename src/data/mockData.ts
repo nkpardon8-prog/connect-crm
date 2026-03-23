@@ -1,4 +1,4 @@
-import type { User, Lead, Activity, EmailMessage, Deal, AISuggestion, EmailSequence } from '@/types/crm';
+import type { User, Lead, Activity, EmailMessage, Deal, AISuggestion, EmailSequence, Campaign } from '@/types/crm';
 
 export const mockUsers: User[] = [
   { id: 'u1', name: 'Sarah Chen', email: 'sarah@integrateapi.ai', role: 'admin' },
