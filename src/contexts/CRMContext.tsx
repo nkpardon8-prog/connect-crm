@@ -15,6 +15,8 @@ interface CRMContextType {
   addActivity: (activity: Activity) => void;
   updateDeal: (id: string, updates: Partial<Deal>) => void;
   addEmail: (email: EmailMessage) => void;
+  markEmailRead: (id: string, read?: boolean) => void;
+  updateEmail: (id: string, updates: Partial<EmailMessage>) => void;
   dismissSuggestion: (id: string) => void;
   addCampaign: (campaign: Campaign) => void;
 }
@@ -61,8 +63,16 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     setCampaigns(prev => [campaign, ...prev]);
   }, []);
 
+  const markEmailRead = useCallback((id: string, read = true) => {
+    setEmails(prev => prev.map(e => e.id === id ? { ...e, read } : e));
+  }, []);
+
+  const updateEmail = useCallback((id: string, updates: Partial<EmailMessage>) => {
+    setEmails(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
+  }, []);
+
   return (
-    <CRMContext.Provider value={{ leads, activities, deals, emails, suggestions, campaigns, updateLead, addLead, addLeads, addActivity, updateDeal, addEmail, dismissSuggestion, addCampaign }}>
+    <CRMContext.Provider value={{ leads, activities, deals, emails, suggestions, campaigns, updateLead, addLead, addLeads, addActivity, updateDeal, addEmail, markEmailRead, updateEmail, dismissSuggestion, addCampaign }}>
       {children}
     </CRMContext.Provider>
   );

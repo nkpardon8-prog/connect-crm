@@ -52,6 +52,8 @@ export interface EmailMessage {
   sentAt: string;
   read: boolean;
   direction: 'inbound' | 'outbound';
+  threadId?: string;
+  replyToId?: string;
 }
 
 export type DealStage = 'new' | 'contacted' | 'qualified' | 'proposal' | 'negotiation' | 'closed_won' | 'closed_lost';
