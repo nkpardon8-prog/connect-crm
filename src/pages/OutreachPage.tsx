@@ -11,8 +11,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Send, RefreshCw, Inbox, PenLine, Layers, Clock, Mail, MailOpen, Megaphone, ArrowRight, ArrowLeft, Users, ChevronDown, ChevronRight } from 'lucide-react';
+import { Send, RefreshCw, Inbox, PenLine, Layers, Clock, Mail, MailOpen, Megaphone, ArrowRight, ArrowLeft, Users, ChevronDown, ChevronRight, Bot, Pencil } from 'lucide-react';
 import type { LeadStatus } from '@/types/crm';
+import CampaignAIChat from '@/components/outreach/CampaignAIChat';
 
 const statusColors: Record<LeadStatus, string> = {
   cold: 'bg-blue-100 text-blue-700',
@@ -41,6 +42,7 @@ export default function OutreachPage() {
   const [campaignSubject, setCampaignSubject] = useState('');
   const [campaignBody, setCampaignBody] = useState('');
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
+  const [campaignMode, setCampaignMode] = useState<'manual' | 'ai'>('ai');
 
   const myLeads = leads.filter(l => l.assignedTo === user?.id);
   const sortedEmails = [...emails].sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
@@ -255,7 +257,89 @@ export default function OutreachPage() {
 
         {/* Campaigns */}
         <TabsContent value="campaigns" className="mt-4 space-y-4">
-          {campaignStep === 'select' && (
+          {/* Mode toggle */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant={campaignMode === 'ai' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setCampaignMode('ai')}
+              className="gap-1.5"
+            >
+              <Bot className="h-3.5 w-3.5" /> AI Assistant
+            </Button>
+            <Button
+              variant={campaignMode === 'manual' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setCampaignMode('manual')}
+              className="gap-1.5"
+            >
+              <Pencil className="h-3.5 w-3.5" /> Manual
+            </Button>
+          </div>
+
+          {/* AI Mode */}
+          {campaignMode === 'ai' && (
+            <>
+              <CampaignAIChat
+                leads={leads}
+                industries={industries}
+                onApplyResult={(result) => {
+                  setSelectedLeadIds(new Set(result.matchedLeadIds));
+                  setCampaignSubject(result.subject);
+                  setCampaignBody(result.body);
+                  if (result.statusFilter) setStatusFilter(result.statusFilter);
+                  else setStatusFilter('all');
+                  if (result.industryFilter) setIndustryFilter(result.industryFilter);
+                  else setIndustryFilter('all');
+                  setCampaignStep('compose');
+                }}
+              />
+
+              {/* Show compose form when AI has filled it */}
+              {campaignStep === 'compose' && selectedLeadIds.size > 0 && (
+                <Card className="border shadow-sm">
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-foreground">AI-Generated Campaign</h3>
+                      <Badge variant="secondary" className="gap-1">
+                        <Users className="h-3 w-3" />
+                        {selectedLeadIds.size} recipients
+                      </Badge>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Subject</label>
+                      <Input
+                        value={campaignSubject}
+                        onChange={e => setCampaignSubject(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Body</label>
+                      <Textarea
+                        value={campaignBody}
+                        onChange={e => setCampaignBody(e.target.value)}
+                        className="min-h-[160px]"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Merge fields: <code className="bg-muted px-1 py-0.5 rounded text-[11px]">{'{{firstName}}'}</code>{' '}
+                        <code className="bg-muted px-1 py-0.5 rounded text-[11px]">{'{{company}}'}</code>
+                      </p>
+                    </div>
+                    <Button
+                      onClick={handleSendCampaign}
+                      disabled={!campaignSubject.trim() || !campaignBody.trim()}
+                      className="gap-1.5"
+                    >
+                      <Send className="h-4 w-4" /> Send to {selectedLeadIds.size} recipients
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+
+          {/* Manual Mode */}
+          {campaignMode === 'manual' && campaignStep === 'select' && (
             <>
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-semibold text-foreground">Select Recipients</h2>
@@ -360,7 +444,7 @@ export default function OutreachPage() {
             </>
           )}
 
-          {campaignStep === 'compose' && (
+          {campaignMode === 'manual' && campaignStep === 'compose' && (
             <>
               <div className="flex items-center gap-3">
                 <Button variant="ghost" size="sm" onClick={() => setCampaignStep('select')} className="gap-1.5">
