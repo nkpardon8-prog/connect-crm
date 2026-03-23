@@ -1,34 +1,74 @@
 
 
-## AI-Powered Campaign Composer — Build Plan
+## Gmail-Style Inbox & Compose — Build Plan
 
-Add a chat-based AI assistant to the Campaigns tab that lets users describe their campaign in natural language and have it auto-fill recipients (via filters), subject line, and email body.
+Transform the Outreach inbox and compose into a Gmail-like email client with clickable messages, threaded conversations, reply/forward, and a unified reading experience.
 
-### How it works
+### What changes
 
-A toggle or button at the top of the Campaigns tab switches between **Manual** mode (current flow) and **AI Assistant** mode. In AI mode:
+**Inbox becomes a two-panel layout:**
+- **Left panel:** Email list (sender/subject/preview/time), clickable rows with read/unread styling
+- **Right panel:** Selected email detail view showing full body, sender info, timestamp, and action buttons (Reply, Forward, Delete/Archive)
+- Clicking an email marks it as read and opens it in the detail pane
 
-1. **Chat interface** — User describes their campaign naturally, e.g. "Send a cold outreach email to all SaaS leads introducing our API integration platform"
-2. **Mock AI response** — The bot parses keywords from the prompt and:
-   - Auto-selects recipients by matching industry and status keywords (e.g. "SaaS" → industry filter, "cold" → status filter)
-   - Generates a subject line and body with `{{firstName}}` and `{{company}}` merge fields
-3. **Preview & edit** — The auto-filled campaign appears in an editable form below the chat, showing selected recipients, subject, and body
-4. **User can refine** — Send another message like "make it shorter" or "also include cloud leads" and the fields update
-5. **Send** — Same send flow as current manual campaigns
+**Threaded conversations:**
+- Emails are grouped by `leadId` into conversation threads
+- Thread view shows all messages in chronological order (both inbound and outbound) in a scrollable stack
+- Each message bubble distinguishes sent vs received (aligned right/left or color-coded)
+
+**Reply & Forward inline:**
+- Reply pre-fills the "to" field and subject (`Re: ...`), opens a compose area at the bottom of the thread
+- Forward opens compose with the original body quoted
+- Sending a reply adds the email to the thread and logs activity
+
+**Compose upgrades:**
+- Compose tab becomes a full Gmail-style compose form: To field with lead search/autocomplete, CC/BCC toggle, subject, rich body area
+- Can also be triggered from "Reply" or "Forward" within the inbox
+- Compose can target any lead (not just assigned ones — remove `myLeads` filter)
+
+**Mark as read/unread:**
+- Add `markEmailRead` method to CRMContext
+- Clicking an email auto-marks as read
+- Option to toggle back to unread
 
 ### Technical changes
 
 | File | Change |
 |------|--------|
-| `src/pages/OutreachPage.tsx` | Add AI chat UI within campaigns tab — chat messages state, input bar, mock AI logic that parses prompts for industry/status keywords and generates email content. Auto-applies filters and fills subject/body fields. Adds a "AI Compose" / "Manual" toggle. |
+| `src/types/crm.ts` | Add optional `threadId` and `replyToId` fields to `EmailMessage` |
+| `src/contexts/CRMContext.tsx` | Add `markEmailRead(id)` and `updateEmail(id, updates)` methods |
+| `src/pages/OutreachPage.tsx` | Rebuild inbox tab as split-pane (list + detail). Group emails by leadId into threads. Add reply/forward flows. Upgrade compose to allow any lead with search. Wire up read/unread toggling. |
+| `src/data/mockData.ts` | Add more mock emails with realistic back-and-forth threads per lead |
 
-No new files needed. The mock AI logic lives inline — it pattern-matches keywords from the user's message against available industries and statuses, selects matching leads, and generates template email content. This is structured to later replace the mock logic with a real Lovable AI call.
+### Layout detail
 
-### Mock AI behavior
+```text
+┌──────────────────────┬────────────────────────────┐
+│  Thread List         │  Conversation View         │
+│                      │                            │
+│  ● John D. (3)       │  From: john@acme.com       │
+│    Re: API Pricing   │  Subject: Re: API Pricing  │
+│    2 hours ago       │  ─────────────────────────  │
+│                      │  Hey Sarah, thanks for...  │
+│  Sarah K. (1)        │                            │
+│    Meeting followup  │  ▸ You (Mar 20):           │
+│    Yesterday         │    Hi John, following up.. │
+│                      │                            │
+│                      │  ▸ John (Mar 21):          │
+│                      │    Sounds good, let's...   │
+│                      │                            │
+│                      │  ┌─── Reply ────────────┐  │
+│                      │  │ Type your reply...    │  │
+│                      │  │          [Send]       │  │
+│                      │  └──────────────────────┘  │
+└──────────────────────┴────────────────────────────┘
+```
 
-- Scans prompt for industry keywords (matched against `leads.map(l => l.industry)`)
-- Scans for status keywords ("cold", "warm", "lukewarm")
-- Auto-selects matching leads and sets filters
-- Generates a contextual subject + body using the prompt topic
-- If no keywords match, selects all leads and asks for clarification
+### Design notes
+- Unread threads shown with bold text and blue dot indicator
+- Selected thread highlighted with blue-50 background
+- Reply area appears inline at bottom of thread (no tab switch needed)
+- Compose tab still available for new conversations
+- All leads selectable as recipients (not just assigned)
+- Responsive: on smaller screens, detail panel replaces list with a back button
 
