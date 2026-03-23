@@ -1,49 +1,34 @@
 
 
-## Bulk Email Campaigns — Build Plan
+## AI-Powered Campaign Composer — Build Plan
 
-The current Outreach page supports only individual emails. This plan adds a new **"Campaigns"** tab to the Outreach page for managing bulk email sends with lead selection, filtering, and template-based composition.
+Add a chat-based AI assistant to the Campaigns tab that lets users describe their campaign in natural language and have it auto-fill recipients (via filters), subject line, and email body.
 
----
+### How it works
 
-### What gets built
+A toggle or button at the top of the Campaigns tab switches between **Manual** mode (current flow) and **AI Assistant** mode. In AI mode:
 
-**New tab on OutreachPage: "Campaigns"**
-
-A dedicated campaign workflow with three steps:
-
-1. **Select Recipients** — Full lead table with:
-   - Multi-select checkboxes (select all / individual)
-   - Filter by **lead status** (Cold / Lukewarm / Warm / Dead)
-   - Filter by **industry** (dynamically populated from lead data)
-   - Search by name/company
-   - Selected count displayed prominently
-   - "Next" button to proceed
-
-2. **Compose Email** — Campaign editor:
-   - Subject line input
-   - Body textarea with merge-field hints (e.g. `{{firstName}}`, `{{company}}`)
-   - Preview of how many recipients are selected
-   - "Send Campaign" button
-
-3. **Campaign Log** — History of sent campaigns:
-   - Campaign name/subject, recipient count, date sent
-   - Expandable to see individual recipients and status
+1. **Chat interface** — User describes their campaign naturally, e.g. "Send a cold outreach email to all SaaS leads introducing our API integration platform"
+2. **Mock AI response** — The bot parses keywords from the prompt and:
+   - Auto-selects recipients by matching industry and status keywords (e.g. "SaaS" → industry filter, "cold" → status filter)
+   - Generates a subject line and body with `{{firstName}}` and `{{company}}` merge fields
+3. **Preview & edit** — The auto-filled campaign appears in an editable form below the chat, showing selected recipients, subject, and body
+4. **User can refine** — Send another message like "make it shorter" or "also include cloud leads" and the fields update
+5. **Send** — Same send flow as current manual campaigns
 
 ### Technical changes
 
 | File | Change |
 |------|--------|
-| `src/types/crm.ts` | Add `Campaign` interface (id, subject, body, recipientIds, sentAt, sentBy) |
-| `src/data/mockData.ts` | Add 2-3 mock campaigns |
-| `src/contexts/CRMContext.tsx` | Add `campaigns` state, `addCampaign` method |
-| `src/pages/OutreachPage.tsx` | Add "Campaigns" tab with the 3-step flow described above |
+| `src/pages/OutreachPage.tsx` | Add AI chat UI within campaigns tab — chat messages state, input bar, mock AI logic that parses prompts for industry/status keywords and generates email content. Auto-applies filters and fills subject/body fields. Adds a "AI Compose" / "Manual" toggle. |
 
-### Design notes
+No new files needed. The mock AI logic lives inline — it pattern-matches keywords from the user's message against available industries and statuses, selects matching leads, and generates template email content. This is structured to later replace the mock logic with a real Lovable AI call.
 
-- Reuses existing card-based layout, table components, and filter patterns from LeadsPage
-- Industry filter options derived dynamically from `leads.map(l => l.industry)`
-- Sending a campaign auto-logs an `email_sent` activity for each recipient
-- Mocked — structured to wire into email API later
-- Follows existing blue accent (#2563EB), shadow-sm card style
+### Mock AI behavior
+
+- Scans prompt for industry keywords (matched against `leads.map(l => l.industry)`)
+- Scans for status keywords ("cold", "warm", "lukewarm")
+- Auto-selects matching leads and sets filters
+- Generates a contextual subject + body using the prompt topic
+- If no keywords match, selects all leads and asks for clarification
 
