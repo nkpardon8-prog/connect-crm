@@ -195,10 +195,14 @@ export default function LeadsPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <button onClick={e => handleCall(e, lead.id, lead.phone)} className="inline-flex items-center gap-1 text-primary hover:underline text-sm">
-                      <Phone className="h-3.5 w-3.5" />
-                      {lead.phone}
-                    </button>
+                    {lead.phone ? (
+                      <button onClick={e => handleCall(e, lead.id, lead.phone)} className="inline-flex items-center gap-1 text-primary hover:underline text-sm">
+                        <Phone className="h-3.5 w-3.5" />
+                        {lead.phone}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <button onClick={e => handleEmail(e, lead.id, lead.email)} className="inline-flex items-center gap-1 text-primary hover:underline text-sm truncate max-w-[180px]">

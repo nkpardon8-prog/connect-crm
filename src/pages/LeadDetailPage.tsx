@@ -263,10 +263,12 @@ export default function LeadDetailPage() {
                     <MapPin className="h-4 w-4 flex-shrink-0" />
                     <span>{lead.location}</span>
                   </div>
-                  <button onClick={handleCall} className="flex items-center gap-2 text-primary hover:underline w-full">
-                    <Phone className="h-4 w-4 flex-shrink-0" />
-                    <span>{lead.phone}</span>
-                  </button>
+                  {lead.phone ? (
+                    <button onClick={handleCall} className="flex items-center gap-2 text-primary hover:underline w-full">
+                      <Phone className="h-4 w-4 flex-shrink-0" />
+                      <span>{lead.phone}</span>
+                    </button>
+                  ) : null}
                   <button onClick={handleEmailClick} className="flex items-center gap-2 text-primary hover:underline w-full min-w-0">
                     <Mail className="h-4 w-4 flex-shrink-0" />
                     <span className="truncate flex-1">{lead.email}</span>
