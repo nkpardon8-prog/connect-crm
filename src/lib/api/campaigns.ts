@@ -26,3 +26,59 @@ export async function createCampaign(
   if (error) throw error;
   return toCamelCase<Campaign>(data);
 }
+
+export async function getCampaign(id: string): Promise<Campaign | null> {
+  const { data, error } = await supabase.from('campaigns').select('*').eq('id', id).single();
+  if (error) { if (error.code === 'PGRST116') return null; throw error; }
+  return toCamelCase<Campaign>(data);
+}
+
+export async function updateCampaign(id: string, updates: Partial<Campaign>): Promise<void> {
+  const { id: _id, ...rest } = updates;
+  const snaked = toSnakeCase(rest as unknown as Record<string, unknown>);
+  const { error } = await supabase.from('campaigns').update(snaked).eq('id', id);
+  if (error) throw error;
+}
+
+export async function cloneCampaign(id: string): Promise<Campaign> {
+  const original = await getCampaign(id);
+  if (!original) throw new Error('Campaign not found');
+  return createCampaign({
+    name: `${original.name} (Copy)`,
+    subject: original.subject,
+    body: original.body,
+    recipientIds: [],
+    sentAt: new Date().toISOString(),
+    sentBy: original.sentBy,
+    status: 'draft',
+    variantBSubject: original.variantBSubject,
+    variantBBody: original.variantBBody,
+    abTestEnabled: original.abTestEnabled,
+  });
+}
+
+export async function deleteCampaign(id: string): Promise<void> {
+  const { error } = await supabase.from('campaigns').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function getCampaignAnalytics(campaignId: string) {
+  const { data: emails, error } = await supabase
+    .from('emails')
+    .select('id, opened_at, clicked_at, bounced_at, direction')
+    .eq('campaign_id', campaignId)
+    .eq('direction', 'outbound');
+  if (error) throw error;
+
+  const sent = emails?.length || 0;
+  const opened = emails?.filter(e => e.opened_at).length || 0;
+  const clicked = emails?.filter(e => e.clicked_at).length || 0;
+  const bounced = emails?.filter(e => e.bounced_at).length || 0;
+
+  // Count unsubscribes linked to this campaign's recipients
+  const { count: unsubscribed } = await supabase
+    .from('unsubscribes')
+    .select('id', { count: 'exact', head: true });
+
+  return { sent, opened, clicked, bounced, unsubscribed: unsubscribed || 0 };
+}

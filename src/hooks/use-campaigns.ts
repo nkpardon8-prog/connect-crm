@@ -16,6 +16,22 @@ export function useCampaigns() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['campaigns'] }),
   });
 
+  const updateCampaignMutation = useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: Partial<Campaign> }) =>
+      api.updateCampaign(id, updates),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['campaigns'] }),
+  });
+
+  const cloneCampaignMutation = useMutation({
+    mutationFn: (id: string) => api.cloneCampaign(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['campaigns'] }),
+  });
+
+  const deleteCampaignMutation = useMutation({
+    mutationFn: (id: string) => api.deleteCampaign(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['campaigns'] }),
+  });
+
   return {
     campaigns,
     isLoading,
@@ -24,5 +40,9 @@ export function useCampaigns() {
       addCampaignMutation.mutate(campaign),
     addCampaignAsync: (campaign: Omit<Campaign, 'id'>) =>
       addCampaignMutation.mutateAsync(campaign),
+    updateCampaign: (id: string, updates: Partial<Campaign>) =>
+      updateCampaignMutation.mutateAsync({ id, updates }),
+    cloneCampaign: (id: string) => cloneCampaignMutation.mutateAsync(id),
+    deleteCampaign: (id: string) => deleteCampaignMutation.mutateAsync(id),
   };
 }

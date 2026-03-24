@@ -43,6 +43,8 @@ When adding changelog entries, use this format:
 | `/leads/:id` | Lead Detail | [leads.md](./leads.md) |
 | `/generator` | Lead Generator | [lead-generator.md](./lead-generator.md) |
 | `/outreach` | Outreach (Inbox/Compose/Campaigns/Sequences) | [outreach.md](./outreach.md) |
+| `/outreach/campaign/:id` | Campaign Detail | [campaigns.md](./campaigns.md) |
+| `/unsubscribe/:token` | Unsubscribe (public, no auth) | [campaigns.md](./campaigns.md) |
 | `/pipeline` | Pipeline Board | [pipeline.md](./pipeline.md) |
 | `/settings` | Settings | [settings.md](./settings.md) |
 
@@ -64,6 +66,7 @@ When adding changelog entries, use this format:
 | 10 | Settings | [settings.md](./settings.md) | Active | Profile editing (name + sending email), team management (invite new members, delete members), integrations status |
 | 11 | UI Components | [ui-components.md](./ui-components.md) | Active | shadcn/ui library, layout shell, custom components |
 | 12 | Database Schema | [schema.md](./schema.md) | Active | Supabase PostgreSQL schema, RLS policies, triggers, API layer |
+| 13 | Campaign Engine | [campaigns.md](./campaigns.md) | Active (Phase 1a) | Campaign management dashboard, analytics, unsubscribe infrastructure, cloning |
 
 **Status definitions:**
 - **Active** — Feature is functional with working interactions
@@ -86,6 +89,8 @@ When you modify a source file, update the corresponding documentation file(s):
 | `src/pages/LeadDetailPage.tsx` | [leads.md](./leads.md) |
 | `src/pages/LeadGeneratorPage.tsx` | [lead-generator.md](./lead-generator.md) |
 | `src/pages/OutreachPage.tsx` | [outreach.md](./outreach.md) |
+| `src/pages/CampaignDetailPage.tsx` | [campaigns.md](./campaigns.md), [outreach.md](./outreach.md) |
+| `src/pages/UnsubscribePage.tsx` | [campaigns.md](./campaigns.md) |
 | `src/pages/PipelinePage.tsx` | [pipeline.md](./pipeline.md) |
 | `src/pages/SettingsPage.tsx` | [settings.md](./settings.md) |
 | `src/pages/Index.tsx` | [architecture.md](./architecture.md) |
@@ -104,6 +109,8 @@ When you modify a source file, update the corresponding documentation file(s):
 | `src/components/AppSidebar.tsx` | [ui-components.md](./ui-components.md) |
 | `src/components/NavLink.tsx` | [ui-components.md](./ui-components.md) |
 | `src/components/outreach/CampaignAIChat.tsx` | [outreach.md](./outreach.md) |
+| `src/components/outreach/CampaignList.tsx` | [campaigns.md](./campaigns.md), [outreach.md](./outreach.md) |
+| `src/components/outreach/CampaignAnalytics.tsx` | [campaigns.md](./campaigns.md) |
 | `src/components/ui/*.tsx` | [ui-components.md](./ui-components.md) |
 
 ### Database & API
@@ -158,6 +165,7 @@ connect-crm/
 │   ├── leads.md                   # Lead list + detail
 │   ├── lead-generator.md          # AI lead generation
 │   ├── outreach.md                # Email inbox, campaigns, sequences
+│   ├── campaigns.md               # Campaign engine, analytics, unsubscribe
 │   ├── pipeline.md                # Deal kanban
 │   ├── settings.md                # Profile, team, integrations
 │   ├── ui-components.md           # UI library, layout, custom components
@@ -244,3 +252,4 @@ Track all significant changes here: new features, architectural shifts, new rout
 | 2026-03-23 | Email UI redesign — Gmail-style message cards, formatting toolbar, flexible To field | Outreach | Messages display as email cards with From/To headers, compose accepts raw email addresses |
 | 2026-03-23 | Inbox folder sidebar — Inbox, Sent, All Mail folders for email filtering | Outreach | Gmail-style folder navigation within the inbox tab |
 | 2026-03-23 | Team management: invite tokens, signup flow, member deletion | Authentication, Settings, Schema | Admin generates invite link via create-invite Edge Function; new member signs up with token + password via signup-with-token Edge Function (auto-login on success); admin can delete members via delete-member Edge Function; leads/deals preserved unassigned on member deletion (ON DELETE SET NULL); login page now has Sign In / Sign Up toggle |
+| 2026-03-23 | Campaign Engine Phase 1a: campaign management dashboard, analytics, detail page, cloning, unsubscribe infrastructure | Outreach, Schema | CampaignList replaces old history cards; CampaignDetailPage at /outreach/campaign/:id; analytics from emails.campaign_id FK; token-based unsubscribe at /unsubscribe/:token; new DB tables (unsubscribes, campaign_templates, campaign_sequences, campaign_steps); expanded campaigns schema |

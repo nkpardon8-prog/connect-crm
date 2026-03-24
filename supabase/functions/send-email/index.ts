@@ -15,8 +15,10 @@ Deno.serve(async (req) => {
       )
     }
 
+    const SITE_URL = Deno.env.get('SITE_URL') || ''
+
     const authHeader = req.headers.get('Authorization')!
-    const { emails } = await req.json()
+    const { emails, campaignId } = await req.json()
 
     if (!emails || !Array.isArray(emails) || emails.length === 0) {
       return new Response(
@@ -124,6 +126,7 @@ Deno.serve(async (req) => {
 
       const { data: row, error: dbErr } = await supabaseAdmin.from('emails').insert({
         lead_id: email.leadId || null,
+        campaign_id: campaignId || null,
         from: validFrom,
         to: email.to,
         subject: email.subject,
@@ -143,11 +146,22 @@ Deno.serve(async (req) => {
       // Batch send (campaigns) — chunks of 100
       for (let i = 0; i < emails.length; i += 100) {
         const chunk = emails.slice(i, i + 100)
-        const resendBatch = chunk.map((email: Record<string, string>) => ({
+        // Resolve unsubscribe links per recipient before sending
+        const resolvedBodies: string[] = chunk.map((email: Record<string, string>) => {
+          let emailBody = email.body
+          if (SITE_URL && emailBody.includes('{{unsubscribeLink}}')) {
+            const unsubToken = crypto.randomUUID()
+            const unsubUrl = `${SITE_URL}/unsubscribe/${unsubToken}?email=${encodeURIComponent(email.to)}`
+            emailBody = emailBody.replace(/\{\{unsubscribeLink\}\}/g, unsubUrl)
+          }
+          return emailBody
+        })
+
+        const resendBatch = chunk.map((email: Record<string, string>, idx: number) => ({
           from: `${senderName} <${validFrom}>`,
           to: [email.to],
           subject: email.subject,
-          text: email.body,
+          text: resolvedBodies[idx],
         }))
 
         const resendRes = await fetch('https://api.resend.com/emails/batch', {
@@ -169,10 +183,11 @@ Deno.serve(async (req) => {
 
         const rows = chunk.map((email: Record<string, string>, idx: number) => ({
           lead_id: email.leadId || null,
+          campaign_id: campaignId || null,
           from: validFrom,
           to: email.to,
           subject: email.subject,
-          body: email.body,
+          body: resolvedBodies[idx],
           sent_at: new Date().toISOString(),
           read: true,
           direction: 'outbound',

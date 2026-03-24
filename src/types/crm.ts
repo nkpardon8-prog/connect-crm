@@ -47,6 +47,7 @@ export interface Activity {
 export interface EmailMessage {
   id: string;
   leadId?: string;
+  campaignId?: string;
   from: string;
   to: string;
   subject: string;
@@ -102,9 +103,36 @@ export interface AISuggestion {
 
 export interface Campaign {
   id: string;
+  name: string;
   subject: string;
   body: string;
   recipientIds: string[];
   sentAt: string;
   sentBy: string;
+  status: 'draft' | 'active' | 'paused' | 'completed';
+  scheduledAt?: string;
+  dripConfig?: Record<string, unknown>;
+  variantBSubject?: string;
+  variantBBody?: string;
+  abTestEnabled: boolean;
+  sequenceId?: string;
+}
+
+export interface CampaignTemplate {
+  id: string;
+  name: string;
+  subject: string;
+  body: string;
+  createdBy: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Unsubscribe {
+  id: string;
+  leadId?: string;
+  email: string;
+  token: string;
+  unsubscribedAt: string;
 }

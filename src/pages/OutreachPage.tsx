@@ -22,6 +22,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Send, RefreshCw, Inbox, PenLine, Layers, Clock, Mail, MailOpen, Megaphone, ArrowRight, ArrowLeft, Users, ChevronDown, ChevronRight, Bot, Pencil, Reply, Forward, MailCheck, MailX, ArrowUpRight, Eye, MousePointerClick, AlertTriangle, Bold, Italic, Link2, List } from 'lucide-react';
 import type { LeadStatus, EmailMessage } from '@/types/crm';
 import CampaignAIChat from '@/components/outreach/CampaignAIChat';
+import CampaignList from '@/components/campaigns/CampaignList';
 
 const statusColors: Record<LeadStatus, string> = {
   cold: 'bg-blue-100 text-blue-700',
@@ -293,7 +294,7 @@ export default function OutreachPage() {
     const now = new Date().toISOString();
 
     try {
-      await addCampaignAsync({
+      const campaign = await addCampaignAsync({
         subject: campaignSubject.trim(),
         body: campaignBody.trim(),
         recipientIds,
@@ -320,7 +321,7 @@ export default function OutreachPage() {
         };
       }).filter(Boolean) as Array<{leadId: string; from: string; fromName: string; to: string; subject: string; body: string; threadId: string}>;
 
-      const result = await sendBulkEmails(campaignEmails);
+      const result = await sendBulkEmails(campaignEmails, campaign.id);
       if (result?.failedCount > 0) {
         toast.warning(`${result.failedCount} of ${campaignEmails.length} emails failed to send`);
       }
@@ -892,52 +893,7 @@ export default function OutreachPage() {
           )}
 
           {/* Campaign history */}
-          <div className="pt-2">
-            <h3 className="text-sm font-semibold text-foreground mb-3">Campaign History</h3>
-            {campaigns.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No campaigns sent yet</p>
-            ) : (
-              <div className="space-y-2">
-                {campaigns.map(camp => {
-                  const sender = profiles.find(p => p.id === camp.sentBy);
-                  const isExpanded = expandedCampaign === camp.id;
-                  return (
-                    <Card key={camp.id} className="border shadow-sm">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpandedCampaign(isExpanded ? null : camp.id)}>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-foreground truncate">{camp.subject}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {camp.recipientIds.length} recipients · Sent by {sender?.name ?? 'Unknown'} · {new Date(camp.sentAt).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary">{camp.recipientIds.length} sent</Badge>
-                            {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                          </div>
-                        </div>
-                        {isExpanded && (
-                          <div className="mt-3 pt-3 border-t space-y-1.5">
-                            {camp.recipientIds.map(rid => {
-                              const lead = leads.find(l => l.id === rid);
-                              if (!lead) return null;
-                              return (
-                                <div key={rid} className="flex items-center gap-2 text-sm px-2 py-1 rounded bg-muted/50">
-                                  <Mail className="h-3 w-3 text-muted-foreground" />
-                                  <span className="font-medium text-foreground">{lead.firstName} {lead.lastName}</span>
-                                  <span className="text-muted-foreground">— {lead.email}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <CampaignList />
         </TabsContent>
 
         {/* ===== SEQUENCES ===== */}

@@ -3,7 +3,7 @@
 > Supabase PostgreSQL schema — tables, relationships, RLS policies, triggers, and conventions.
 
 **Status:** Active
-**Last Updated:** 2026-03-22
+**Last Updated:** 2026-03-23
 **Supabase Project:** `onthjkzdgsfvmgyhrorw` (CRM, us-east-1)
 **Related Docs:** [OVERVIEW.md](./OVERVIEW.md) | [data-model.md](./data-model.md) | [state-management.md](./state-management.md) | [architecture.md](./architecture.md)
 
@@ -107,6 +107,7 @@ Central CRM entity.
 | thread_id | text | — | NULL |
 | reply_to_id | uuid | FK → emails(id) ON DELETE SET NULL | NULL |
 | provider_message_id | text | — | NULL |
+| campaign_id | uuid | FK → campaigns(id) ON DELETE SET NULL | NULL |
 | opened_at | timestamptz | — | NULL |
 | clicked_at | timestamptz | — | NULL |
 | bounced_at | timestamptz | — | NULL |
@@ -114,7 +115,7 @@ Central CRM entity.
 | updated_at | timestamptz | NOT NULL | now() (auto-updated) |
 | deleted_at | timestamptz | — | NULL (soft delete) |
 
-**Indexes:** lead_id, thread_id, direction, deleted_at (partial: WHERE NULL)
+**Indexes:** lead_id, thread_id, direction, campaign_id, deleted_at (partial: WHERE NULL)
 
 ### deals
 
@@ -153,16 +154,77 @@ Central CRM entity.
 | Column | Type | Constraints | Default |
 |--------|------|-------------|---------|
 | id | uuid | PK | uuid_generate_v4() |
+| name | text | NOT NULL | '' |
 | subject | text | NOT NULL | — |
 | body | text | NOT NULL | — |
+| status | text | NOT NULL, CHECK (draft, active, paused, completed) | 'draft' |
 | recipient_ids | uuid[] | NOT NULL | '{}' |
 | sent_at | timestamptz | NOT NULL | now() |
 | sent_by | uuid | NOT NULL, FK → profiles(id) | — |
+| scheduled_at | timestamptz | — | NULL |
+| drip_config | jsonb | — | NULL |
+| variant_b_subject | text | — | NULL |
+| variant_b_body | text | — | NULL |
+| ab_test_enabled | boolean | NOT NULL | false |
+| sequence_id | uuid | FK → email_sequences(id) ON DELETE SET NULL | NULL |
 | created_at | timestamptz | NOT NULL | now() |
 | updated_at | timestamptz | NOT NULL | now() (auto-updated) |
 | deleted_at | timestamptz | — | NULL (soft delete) |
 
-**Indexes:** sent_by, deleted_at (partial: WHERE NULL)
+**Indexes:** sent_by, status, deleted_at (partial: WHERE NULL)
+
+### unsubscribes
+Tracks leads who have opted out of campaigns. Populated by the `unsubscribe` Edge Function via token validation.
+
+| Column | Type | Constraints | Default |
+|--------|------|-------------|---------|
+| id | uuid | PK | uuid_generate_v4() |
+| lead_id | uuid | FK → leads(id) ON DELETE CASCADE | NULL |
+| email | text | NOT NULL | — |
+| token | text | NOT NULL, UNIQUE | — |
+| campaign_id | uuid | FK → campaigns(id) ON DELETE SET NULL | NULL |
+| created_at | timestamptz | NOT NULL | now() |
+
+**Indexes:** lead_id, email, token (unique)
+
+### campaign_templates (Phase 1b)
+Template library for reusable campaign email templates.
+
+| Column | Type | Constraints | Default |
+|--------|------|-------------|---------|
+| id | uuid | PK | uuid_generate_v4() |
+| name | text | NOT NULL | — |
+| subject | text | NOT NULL | — |
+| body | text | NOT NULL | — |
+| created_by | uuid | NOT NULL, FK → profiles(id) | — |
+| created_at | timestamptz | NOT NULL | now() |
+| updated_at | timestamptz | NOT NULL | now() (auto-updated) |
+
+### campaign_sequences (Phase 2)
+Links campaigns to follow-up sequences.
+
+| Column | Type | Constraints | Default |
+|--------|------|-------------|---------|
+| id | uuid | PK | uuid_generate_v4() |
+| campaign_id | uuid | NOT NULL, FK → campaigns(id) ON DELETE CASCADE | — |
+| sequence_id | uuid | NOT NULL, FK → email_sequences(id) ON DELETE CASCADE | — |
+| created_at | timestamptz | NOT NULL | now() |
+
+### campaign_steps (Phase 2)
+Individual steps in a campaign follow-up sequence.
+
+| Column | Type | Constraints | Default |
+|--------|------|-------------|---------|
+| id | uuid | PK | uuid_generate_v4() |
+| campaign_id | uuid | NOT NULL, FK → campaigns(id) ON DELETE CASCADE | — |
+| order | integer | NOT NULL | — |
+| subject | text | NOT NULL | '' |
+| body | text | NOT NULL | '' |
+| delay_days | integer | NOT NULL | 0 |
+| created_at | timestamptz | NOT NULL | now() |
+| updated_at | timestamptz | NOT NULL | now() (auto-updated) |
+
+**Indexes:** campaign_id
 
 ### email_sequences
 
@@ -337,6 +399,7 @@ Supabase Edge Functions provide server-side compute for operations that require 
 | `create-invite` | `supabase/functions/create-invite/index.ts` | Admin-only: validates caller is admin, generates a secure random token, inserts a row into `invites`, returns the invite link | — |
 | `signup-with-token` | `supabase/functions/signup-with-token/index.ts` | Public: validates invite token (exists, not used, not expired), calls `supabase.auth.admin.createUser` with the provided password, marks the invite as `used = true`, returns session tokens for auto-login | — |
 | `delete-member` | `supabase/functions/delete-member/index.ts` | Admin-only: deletes a user from `auth.users` (cascades to `profiles`); `ON DELETE SET NULL` on `leads.assigned_to` and `deals.assigned_to` ensures their records are preserved unassigned | — |
+| `unsubscribe` | `supabase/functions/unsubscribe/index.ts` | Public endpoint (no auth): validates token from query param, inserts row into `unsubscribes`, returns confirmation page | — |
 
 ### campaign-ai
 
@@ -370,6 +433,12 @@ Admin-only endpoint (validates JWT + `is_admin()`). Accepts `{ userId }` in the 
 
 **No additional environment secrets required.**
 
+### unsubscribe
+
+Public endpoint (no auth required). Accepts a `token` query parameter (and optionally `email` for display). Looks up the token in the `unsubscribes` table to prevent double-inserts — rejects if the token has already been used. Inserts a new row into `unsubscribes` with the `lead_id`, `email`, and `campaign_id` derived from the token payload. Returns an HTML confirmation page to the browser. Tokens are generated per-recipient by the `send-email` Edge Function at campaign send time and embedded in the `{{unsubscribeLink}}` merge field.
+
+**No environment secrets required.**
+
 ---
 
 ## Known Limitations
@@ -401,3 +470,4 @@ Admin-only endpoint (validates JWT + `is_admin()`). Accepts `{ userId }` in the 
 | 2026-03-23 | Added email tracking columns (provider_message_id, opened_at, clicked_at, bounced_at), send-email and email-events Edge Functions | emails table, supabase/functions/ |
 | 2026-03-23 | email-events Edge Function now handles inbound email (email.received) | supabase/functions/email-events/ |
 | 2026-03-23 | Team management: invites table, create-invite / signup-with-token / delete-member Edge Functions, FK changes (leads.assigned_to, deals.assigned_to now ON DELETE SET NULL) | invites table, supabase/functions/ |
+| 2026-03-23 | Campaign Engine Phase 1a: new columns on campaigns (name, status, scheduled_at, drip_config, variant_b_subject, variant_b_body, ab_test_enabled, sequence_id), campaign_id FK on emails, new tables (unsubscribes, campaign_templates, campaign_sequences, campaign_steps), unsubscribe Edge Function | campaigns, emails, supabase/functions/ |

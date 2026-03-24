@@ -14,6 +14,8 @@ import OutreachPage from "@/pages/OutreachPage";
 import PipelinePage from "@/pages/PipelinePage";
 import SettingsPage from "@/pages/SettingsPage";
 import NotFound from "@/pages/NotFound";
+import UnsubscribePage from "@/pages/UnsubscribePage";
+import CampaignDetailPage from "@/pages/CampaignDetailPage";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +42,7 @@ function AuthGate() {
         <Route path="/leads/:id" element={<LeadDetailPage />} />
         <Route path="/generator" element={<LeadGeneratorPage />} />
         <Route path="/outreach" element={<OutreachPage />} />
+        <Route path="/outreach/campaign/:id" element={<CampaignDetailPage />} />
         <Route path="/pipeline" element={<PipelinePage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
@@ -56,6 +59,7 @@ const App = () => (
       <AuthProvider>
         <BrowserRouter>
           <Routes>
+            <Route path="/unsubscribe/:token" element={<UnsubscribePage />} />
             <Route path="/*" element={<AuthGate />} />
           </Routes>
         </BrowserRouter>

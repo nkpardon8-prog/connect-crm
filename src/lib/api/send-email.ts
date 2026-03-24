@@ -27,9 +27,9 @@ export async function sendEmail(email: SendEmailRequest): Promise<SendEmailRespo
   return data as SendEmailResponse;
 }
 
-export async function sendBulkEmails(emails: SendEmailRequest[]): Promise<SendEmailResponse> {
+export async function sendBulkEmails(emails: SendEmailRequest[], campaignId?: string): Promise<SendEmailResponse> {
   const { data, error } = await supabase.functions.invoke('send-email', {
-    body: { emails },
+    body: { emails, campaignId: campaignId ?? null },
   });
 
   if (error) throw error;

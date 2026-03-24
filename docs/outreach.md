@@ -3,8 +3,8 @@
 > Gmail-style inbox with threading, email compose, bulk campaigns (AI + manual modes), and email sequences.
 
 **Status:** Active
-**Last Updated:** 2026-03-22
-**Related Docs:** [OVERVIEW.md](./OVERVIEW.md) | [state-management.md](./state-management.md) | [data-model.md](./data-model.md) | [leads.md](./leads.md)
+**Last Updated:** 2026-03-23
+**Related Docs:** [OVERVIEW.md](./OVERVIEW.md) | [state-management.md](./state-management.md) | [data-model.md](./data-model.md) | [leads.md](./leads.md) | [campaigns.md](./campaigns.md)
 
 ---
 
@@ -19,7 +19,10 @@ The Outreach page (`/outreach`) is a multi-tab interface for all email-related f
 | File | Purpose |
 |------|---------|
 | `src/pages/OutreachPage.tsx` | Main outreach page — all 4 tabs (Inbox, Compose, Campaigns, Sequences) |
+| `src/pages/CampaignDetailPage.tsx` | Campaign detail page — analytics, content preview, recipient status, clone |
 | `src/components/outreach/CampaignAIChat.tsx` | AI chat component for campaign creation |
+| `src/components/outreach/CampaignList.tsx` | Campaign management list with status badges and per-campaign analytics |
+| `src/components/outreach/CampaignAnalytics.tsx` | Analytics display component (sent/opened/clicked/bounced metrics) |
 | `src/lib/api/campaign-ai.ts` | Client API function for campaign AI Edge Function |
 
 ---
@@ -202,13 +205,23 @@ When "Send to X recipients" is clicked:
 5. Clear form state
 6. Show success toast
 
-#### Campaign History
+#### Campaign Management List (CampaignList Component)
 
-Below the compose section, all sent campaigns are listed:
-- Each campaign card shows: subject, recipient count, sender name, sent date
-- Cards are expandable (click to toggle)
-- Expanded view shows table of recipients: name, email
-- Recipient names looked up from leads array
+The Campaigns tab now shows the `CampaignList` component — a full management dashboard replacing the old expandable history cards. Features:
+- All campaigns displayed with status badges (draft/active/paused/completed)
+- Per-campaign analytics inline: sent count, opened rate (%), clicked count, bounced count — computed from the `emails` table via `campaign_id` FK
+- Actions per campaign: view detail (navigates to `/outreach/campaign/:id`), clone, delete
+- The old campaign history expandable cards have been removed
+
+#### Campaign Detail Page (`/outreach/campaign/:id`)
+
+Accessible from the campaign list. Displays:
+- Full analytics via the `CampaignAnalytics` component (sent/opened/clicked/bounced/unsubscribed)
+- Email content preview: subject and body
+- Recipient list with per-recipient delivery status (delivered/opened/clicked/bounced)
+- Clone campaign button — clones name, subject, body, A/B variants; does NOT copy `recipient_ids` (stale data)
+
+See [campaigns.md](./campaigns.md) for full campaign engine documentation.
 
 ---
 
@@ -307,7 +320,7 @@ No CRUD operations — sequences are read-only.
 - No email signatures
 - Sequences are display-only (no execution engine)
 - Campaign AI depends on external LLM service (OpenRouter/DeepSeek V3.2) — requires internet connectivity and valid API key
-- No unsubscribe/opt-out management
+- Unsubscribe infrastructure implemented (Phase 1a) — token-based, public `/unsubscribe/:token` route; full opt-out management UI is Phase 1b
 - No email validation
 - Refresh button triggers a real query invalidation but has no server-push/realtime subscription
 - No thread archiving or deletion
@@ -342,3 +355,4 @@ No CRUD operations — sequences are read-only.
 | 2026-03-23 | Email tracking indicators added to inbox — Opened/Clicked/Bounced on sent emails, thread-level opened indicator | OutreachPage.tsx |
 | 2026-03-23 | Email UI redesign: Gmail-style message cards, formatting toolbar on reply/compose, dual-mode To field (lead search + raw email) | OutreachPage.tsx |
 | 2026-03-23 | Gmail-style folder sidebar: Inbox/Sent/All Mail filters in the inbox tab | OutreachPage.tsx |
+| 2026-03-23 | Campaign Engine Phase 1a: management list with analytics, detail page, cloning, unsubscribe infrastructure | OutreachPage.tsx, CampaignList, CampaignDetailPage, send-email |

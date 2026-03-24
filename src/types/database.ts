@@ -150,39 +150,177 @@ export type Database = {
           },
         ]
       }
-      campaigns: {
+      campaign_templates: {
         Row: {
-          body: string
-          created_at: string
-          deleted_at: string | null
           id: string
-          recipient_ids: string[]
-          sent_at: string
-          sent_by: string
+          name: string
           subject: string
+          body: string
+          created_by: string
+          tags: string[]
+          created_at: string
           updated_at: string
         }
         Insert: {
-          body: string
-          created_at?: string
-          deleted_at?: string | null
           id?: string
-          recipient_ids?: string[]
-          sent_at?: string
-          sent_by: string
+          name: string
           subject: string
+          body: string
+          created_by: string
+          tags?: string[]
+          created_at?: string
           updated_at?: string
         }
         Update: {
+          id?: string
+          name?: string
+          subject?: string
+          body?: string
+          created_by?: string
+          tags?: string[]
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaign_sequences: {
+        Row: {
+          id: string
+          name: string
+          created_by: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          created_by: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          created_by?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_sequences_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaign_steps: {
+        Row: {
+          id: string
+          sequence_id: string
+          order: number
+          subject: string
+          body: string
+          delay_days: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          sequence_id: string
+          order: number
+          subject: string
+          body: string
+          delay_days?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          sequence_id?: string
+          order?: number
+          subject?: string
+          body?: string
+          delay_days?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_steps_sequence_id_fkey"
+            columns: ["sequence_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_sequences"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaigns: {
+        Row: {
+          ab_test_enabled: boolean
+          body: string
+          created_at: string
+          deleted_at: string | null
+          drip_config: Record<string, unknown> | null
+          id: string
+          name: string
+          recipient_ids: string[]
+          scheduled_at: string | null
+          sent_at: string
+          sent_by: string
+          sequence_id: string | null
+          status: string
+          subject: string
+          updated_at: string
+          variant_b_body: string | null
+          variant_b_subject: string | null
+        }
+        Insert: {
+          ab_test_enabled?: boolean
+          body: string
+          created_at?: string
+          deleted_at?: string | null
+          drip_config?: Record<string, unknown> | null
+          id?: string
+          name: string
+          recipient_ids?: string[]
+          scheduled_at?: string | null
+          sent_at?: string
+          sent_by: string
+          sequence_id?: string | null
+          status?: string
+          subject: string
+          updated_at?: string
+          variant_b_body?: string | null
+          variant_b_subject?: string | null
+        }
+        Update: {
+          ab_test_enabled?: boolean
           body?: string
           created_at?: string
           deleted_at?: string | null
+          drip_config?: Record<string, unknown> | null
           id?: string
+          name?: string
           recipient_ids?: string[]
+          scheduled_at?: string | null
           sent_at?: string
           sent_by?: string
+          sequence_id?: string | null
+          status?: string
           subject?: string
           updated_at?: string
+          variant_b_body?: string | null
+          variant_b_subject?: string | null
         }
         Relationships: [
           {
@@ -190,6 +328,38 @@ export type Database = {
             columns: ["sent_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      unsubscribes: {
+        Row: {
+          id: string
+          lead_id: string | null
+          email: string
+          token: string
+          unsubscribed_at: string
+        }
+        Insert: {
+          id?: string
+          lead_id?: string | null
+          email: string
+          token: string
+          unsubscribed_at?: string
+        }
+        Update: {
+          id?: string
+          lead_id?: string | null
+          email?: string
+          token?: string
+          unsubscribed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "unsubscribes_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
             referencedColumns: ["id"]
           },
         ]
@@ -283,6 +453,7 @@ export type Database = {
       emails: {
         Row: {
           body: string
+          campaign_id: string | null
           created_at: string
           deleted_at: string | null
           direction: string
@@ -303,6 +474,7 @@ export type Database = {
         }
         Insert: {
           body?: string
+          campaign_id?: string | null
           created_at?: string
           deleted_at?: string | null
           direction: string
@@ -323,6 +495,7 @@ export type Database = {
         }
         Update: {
           body?: string
+          campaign_id?: string | null
           created_at?: string
           deleted_at?: string | null
           direction?: string
