@@ -69,6 +69,9 @@ The Lead Generator (`/generator`) provides a conversational chat interface where
 8a. Results found — Bot responds with:
     - Text: "Found N contacts matching your criteria. Here's the list:"
     - Table: Name, Title, Company, Location, Email, Contact Score
+    - Leads already in the CRM are shown with an "Already in CRM" badge
+      in the search results table (matched by apollo_id pre-enrichment,
+      then by email post-enrichment)
     - Import button: "Import N as Cold Leads"
     - Search results are immediately persisted to `lead_search_history`
       in Supabase before the user takes any action
@@ -141,7 +144,11 @@ const handleImport = (leads: Lead[], msgIndex: number) => {
 ```
 
 - Assigns all leads to the current user
-- Adds to CRM context via `addLeads()`
+- Adds to CRM via `addLeads()`
+- **Deduplication runs at two layers before import:**
+  1. **Pre-enrichment (by `apollo_id`)** — contacts whose `apollo_id` already exists in the CRM are flagged immediately after the Apollo People Search, before bulk enrichment is called. This avoids spending enrichment credits on leads the team already has.
+  2. **Post-enrichment (by email)** — after bulk enrichment runs and verified emails are available, any remaining contacts whose email matches an existing lead are also flagged.
+  - Flagged duplicates are shown in the search results table with an "Already in CRM" badge but are excluded from the import count and silently skipped when the user clicks the import button.
 - Tracks which message batches have been imported via `importedSets` Set
 - Import button shows "Imported to CRM" and is disabled after import
 - Each chat message's import is independent (can import from multiple responses)
@@ -202,7 +209,7 @@ const handleImport = (leads: Lead[], msgIndex: number) => {
 ## Known Limitations & TODOs
 
 - Result count capped at 50
-- No deduplication against existing leads
+- ~~No deduplication against existing leads~~ — deduplication is now implemented (see Import Logic)
 - LLM parsing may occasionally misinterpret ambiguous prompts
 - Cannot customize which fields to import
 - Cannot preview/edit leads before import
@@ -213,7 +220,7 @@ const handleImport = (leads: Lead[], msgIndex: number) => {
 
 ## Future Considerations
 
-- Add lead deduplication against existing CRM leads
+- ~~Add lead deduplication against existing CRM leads~~ — completed
 - Add ability to select individual leads before importing (checkbox on each row)
 - Add richer enrichment data (funding, revenue, tech stack, social profiles)
 - Consider streaming Edge Function responses for real-time feel
@@ -233,3 +240,4 @@ const handleImport = (leads: Lead[], msgIndex: number) => {
 | 2026-03-23 | Phone number reveal: async webhook from Apollo, apolloId tracking, pending indicator | apollo-search, apollo-phone-webhook, LeadGeneratorPage |
 | 2026-03-24 | Search history persistence: results saved to DB immediately, chat restores on navigation | `LeadGeneratorPage.tsx`, `search-history.ts` |
 | 2026-03-24 | Conversational lead generator: GPT-4.1-mini manages dialog, confirms before searching, suggests refinements, clickable action buttons | `lead-gen-chat`, `LeadGeneratorPage`, `lead-gen-chat.ts` |
+| 2026-03-24 | Lead deduplication: pre-enrichment by apollo_id (saves credits), post-enrichment by email, "In CRM" badge, import skips duplicates | `lead-gen-chat`, `LeadGeneratorPage` |

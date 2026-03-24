@@ -64,6 +64,7 @@ async function runApolloSearch(
   perPage: number,
   apolloApiKey: string,
   zeroBounceApiKey: string | undefined,
+  supabaseAdmin?: ReturnType<typeof createClient>,
 ) {
   // Step 1: Apollo People Search (0 credits)
   const searchBody: Record<string, unknown> = { per_page: Math.min(perPage, 100), page: 1 }
@@ -85,17 +86,40 @@ async function runApolloSearch(
     body: JSON.stringify(searchBody),
   })
 
-  if (!searchRes.ok) return { leads: [], totalFound: 0, creditsUsed: 0 }
+  if (!searchRes.ok) return { leads: [], totalFound: 0, creditsUsed: 0, skippedDuplicates: 0 }
 
   const searchData = await searchRes.json()
   const people = searchData.people || []
   const totalFound = searchData.pagination?.total_entries || 0
 
-  if (people.length === 0) return { leads: [], totalFound: 0, creditsUsed: 0 }
+  if (people.length === 0) return { leads: [], totalFound: 0, creditsUsed: 0, skippedDuplicates: 0 }
+
+  // Pre-enrichment dedup: check which Apollo person IDs already exist in CRM
+  const apolloPersonIds = people.map((p: { id: string }) => p.id)
+  let existingApolloIds = new Set<string>()
+
+  if (supabaseAdmin && apolloPersonIds.length > 0) {
+    const { data: existingByApolloId } = await supabaseAdmin
+      .from('leads')
+      .select('apollo_id')
+      .in('apollo_id', apolloPersonIds)
+      .not('apollo_id', 'is', null)
+
+    existingApolloIds = new Set((existingByApolloId || []).map((r: { apollo_id: string }) => r.apollo_id))
+    console.log(`Dedup: ${existingApolloIds.size} of ${people.length} already in CRM by apollo_id`)
+  }
+
+  // Only enrich people NOT already in CRM
+  const newPeople = people.filter((p: { id: string }) => !existingApolloIds.has(p.id))
+  const skippedCount = people.length - newPeople.length
+
+  if (newPeople.length === 0) {
+    return { leads: [], totalFound, creditsUsed: 0, skippedDuplicates: skippedCount }
+  }
 
   // Step 2: Bulk enrichment in batches of 10
   const enriched: Record<string, unknown>[] = []
-  const ids = people.map((p: { id: string }) => ({ id: p.id }))
+  const ids = newPeople.map((p: { id: string }) => ({ id: p.id }))
 
   const SITE_URL = Deno.env.get('SUPABASE_URL') || ''
 
@@ -188,7 +212,24 @@ async function runApolloSearch(
     .sort((a, b) => b._score - a._score)
     .map(({ _score, ...lead }) => lead)
 
-  return { leads: scored, totalFound, creditsUsed: enriched.length }
+  // Post-enrichment dedup: check emails against existing leads
+  if (supabaseAdmin && scored.length > 0) {
+    const enrichedEmails = scored.map(l => l.email).filter(Boolean)
+    if (enrichedEmails.length > 0) {
+      const { data: existingByEmail } = await supabaseAdmin
+        .from('leads')
+        .select('email')
+        .in('email', enrichedEmails)
+
+      const existingEmails = new Set((existingByEmail || []).map((r: { email: string }) => r.email))
+
+      for (const lead of scored) {
+        ;(lead as Record<string, unknown>).isDuplicate = existingEmails.has(lead.email as string)
+      }
+    }
+  }
+
+  return { leads: scored, totalFound, creditsUsed: enriched.length, skippedDuplicates: skippedCount }
 }
 
 // ---- Main Handler ----
@@ -332,16 +373,20 @@ FILTER RULES:
     // If LLM says to search, run Apollo pipeline inline
     if (parsed.shouldSearch) {
       console.log('Running Apollo search with filters:', JSON.stringify(parsed.filters))
+
+      // Create supabaseAdmin before search so it can be used for dedup
+      const supabaseAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+
       const searchResults = await runApolloSearch(
         parsed.filters,
         perPage || 25,
         APOLLO_API_KEY,
         ZEROBOUNCE_API_KEY,
+        supabaseAdmin,
       )
 
       // Log usage
       try {
-        const supabaseAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
         const jwt = authHeader.replace('Bearer ', '')
         const { data: { user } } = await supabaseAdmin.auth.getUser(jwt)
         if (user) {
@@ -362,7 +407,9 @@ FILTER RULES:
       let followUpActions: { label: string; prompt: string }[] = []
 
       if (searchResults.leads.length > 0) {
-        followUpResponse = `Found ${searchResults.leads.length} contacts matching your criteria (${searchResults.creditsUsed} credits used). Here are the results:`
+        const dupCount = searchResults.leads.filter((l: Record<string, unknown>) => l.isDuplicate).length
+        const newCount = searchResults.leads.length - dupCount
+        followUpResponse = `Found ${newCount} new contacts${dupCount > 0 ? ` and ${dupCount} already in your CRM` : ''} (${searchResults.creditsUsed} credits used${searchResults.skippedDuplicates > 0 ? `, ${searchResults.skippedDuplicates} duplicates skipped` : ''}). Here are the results:`
         followUpActions = [
           { label: 'Also check Director-level roles', prompt: 'Also search for Director-level roles with similar criteria' },
           { label: 'Expand to nearby locations', prompt: 'Expand the search to nearby cities and states' },

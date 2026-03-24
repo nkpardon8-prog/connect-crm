@@ -11,11 +11,16 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sparkles, Send, Bot, User as UserIcon, Import, Mail, Phone } from 'lucide-react';
+import { toast } from 'sonner';
+
+interface SearchLead extends Lead {
+  isDuplicate?: boolean;
+}
 
 interface ChatMessage {
   role: 'user' | 'bot';
   content: string;
-  leads?: Lead[];
+  leads?: SearchLead[];
   actions?: { label: string; prompt: string }[];
 }
 
@@ -138,8 +143,13 @@ export default function LeadGeneratorPage() {
     handleSend(prompt);
   };
 
-  const handleImport = (leads: Lead[], msgIndex: number) => {
-    const cleanedLeads = leads.map(({ id, createdAt, ...rest }) => ({
+  const handleImport = (leads: SearchLead[], msgIndex: number) => {
+    const newLeads = leads.filter(l => !l.isDuplicate);
+    if (newLeads.length === 0) {
+      toast.success('All leads are already in your CRM');
+      return;
+    }
+    const cleanedLeads = newLeads.map(({ id, createdAt, isDuplicate, ...rest }) => ({
       ...rest,
       assignedTo: user!.id,
     }));
@@ -221,21 +231,36 @@ export default function LeadGeneratorPage() {
                               )}
                             </TableCell>
                             <TableCell className="text-xs">{l.location}</TableCell>
-                            <TableCell className="text-xs">{contactBadge(l)}</TableCell>
+                            <TableCell className="text-xs">
+                              {l.isDuplicate ? (
+                                <Badge variant="secondary" className="text-[10px] bg-slate-100 text-slate-600">In CRM</Badge>
+                              ) : (
+                                contactBadge(l)
+                              )}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
                     <div className="p-2 border-t bg-muted/30">
-                      <Button
-                        size="sm"
-                        onClick={() => handleImport(msg.leads!, i)}
-                        disabled={importedSets.has(i)}
-                        className="gap-1.5"
-                      >
-                        <Import className="h-3.5 w-3.5" />
-                        {importedSets.has(i) ? 'Imported to CRM' : `Import ${msg.leads.length} as Cold Leads`}
-                      </Button>
+                      {(() => {
+                        const newCount = (msg.leads || []).filter(l => !l.isDuplicate).length;
+                        const totalCount = (msg.leads || []).length;
+                        return (
+                          <Button
+                            size="sm"
+                            onClick={() => handleImport(msg.leads!, i)}
+                            disabled={importedSets.has(i) || newCount === 0}
+                            className="gap-1.5"
+                          >
+                            <Import className="h-3.5 w-3.5" />
+                            {importedSets.has(i) ? 'Imported to CRM'
+                              : newCount === 0 ? 'All already in CRM'
+                              : newCount < totalCount ? `Import ${newCount} new leads (${totalCount - newCount} in CRM)`
+                              : `Import ${newCount} as Cold Leads`}
+                          </Button>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
