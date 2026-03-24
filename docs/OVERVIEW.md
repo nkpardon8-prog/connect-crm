@@ -123,6 +123,7 @@ When you modify a source file, update the corresponding documentation file(s):
 | `src/lib/api/*.ts` | [schema.md](./schema.md) |
 | `src/lib/api/campaign-ai.ts` | [outreach.md](./outreach.md) |
 | `src/lib/api/apollo.ts` | [lead-generator.md](./lead-generator.md) |
+| `src/lib/api/search-history.ts` | [lead-generator.md](./lead-generator.md), [schema.md](./schema.md) |
 | `supabase/functions/apollo-search/index.ts` | [lead-generator.md](./lead-generator.md) |
 | `src/types/database.ts` | [schema.md](./schema.md), [data-model.md](./data-model.md) |
 | `.env` | [architecture.md](./architecture.md) |
@@ -263,3 +264,4 @@ Track all significant changes here: new features, architectural shifts, new rout
 | 2026-03-23 | Lead editing + deal creation UI | Leads, Pipeline | Lead detail fields editable, pipeline has New Deal dialog |
 | 2026-03-23 | Phase B: real dashboard charts + Supabase Realtime on all core hooks | Dashboard, State Management | Weekly activity + revenue computed from real data, multi-user live updates via Realtime |
 | 2026-03-23 | Apollo phone reveal: async webhook delivery, apolloId tracking on leads | Lead Generator | Phone numbers delivered asynchronously via webhook, auto-update leads via Realtime |
+| 2026-03-24 | Search history persistence in Lead Generator | Lead Generator, Schema | Apollo search results written to `lead_search_history` immediately on return; chat history (including un-imported result sets) restores on page navigation; new `search-history.ts` API client |

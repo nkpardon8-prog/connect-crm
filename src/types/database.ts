@@ -718,6 +718,50 @@ export type Database = {
           },
         ]
       }
+      lead_search_history: {
+        Row: {
+          id: string
+          user_id: string
+          prompt: string
+          leads: unknown
+          filters: unknown
+          total_found: number
+          credits_used: number
+          imported: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          prompt: string
+          leads?: unknown
+          filters?: unknown
+          total_found?: number
+          credits_used?: number
+          imported?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          prompt?: string
+          leads?: unknown
+          filters?: unknown
+          total_found?: number
+          credits_used?: number
+          imported?: boolean
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_search_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar: string | null

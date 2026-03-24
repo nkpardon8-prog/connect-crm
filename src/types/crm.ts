@@ -152,3 +152,15 @@ export interface Unsubscribe {
   token: string;
   unsubscribedAt: string;
 }
+
+export interface SearchHistory {
+  id: string;
+  userId: string;
+  prompt: string;
+  leads: Lead[];
+  filters: Record<string, unknown>;
+  totalFound: number;
+  creditsUsed: number;
+  imported: boolean;
+  createdAt: string;
+}

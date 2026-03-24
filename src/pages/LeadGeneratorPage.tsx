@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLeads } from '@/hooks/use-leads';
 import { useAuth } from '@/contexts/AuthContext';
 import { searchApollo } from '@/lib/api/apollo';
+import { saveSearchHistory, loadSearchHistory, markSearchImported, type SearchHistoryEntry } from '@/lib/api/search-history';
 import type { Lead } from '@/types/crm';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,8 +40,47 @@ export default function LeadGeneratorPage() {
   const [selectedCount, setSelectedCount] = useState(25);
   const [showConfirm, setShowConfirm] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState('');
+  const [historyIds, setHistoryIds] = useState<Map<number, string>>(new Map());
 
   const estimatedCredits = Math.min(selectedCount * 2, 50);
+
+  useEffect(() => {
+    if (!user) return;
+    loadSearchHistory(user.id).then((history: SearchHistoryEntry[]) => {
+      if (history.length === 0) return;
+
+      const restoredMessages: ChatMessage[] = [
+        { role: 'bot', content: 'Describe your ideal customer profile and I\'ll search Apollo.io for matching contacts with verified contact information.\n\nFor example: "CTOs at SaaS companies, 50-200 employees, based in Austin"' },
+      ];
+      const restoredImported = new Set<number>();
+      const restoredHistoryIds = new Map<number, string>();
+
+      for (const entry of history) {
+        // User message
+        restoredMessages.push({ role: 'user', content: entry.prompt });
+        // Bot response with leads
+        const botIndex = restoredMessages.length;
+        const botContent = entry.leads.length > 0
+          ? `Found ${entry.totalFound.toLocaleString()} total matches. Showing ${entry.leads.length} enriched contacts with verified contact info (${entry.creditsUsed} credits used).`
+          : 'No matching contacts found with verified contact information. Try broadening your search criteria.';
+        restoredMessages.push({
+          role: 'bot',
+          content: botContent,
+          leads: entry.leads.length > 0 ? entry.leads : undefined,
+        });
+        // Track history ID for this bot message
+        restoredHistoryIds.set(botIndex, entry.id);
+        // Mark as imported if already imported
+        if (entry.imported) {
+          restoredImported.add(botIndex);
+        }
+      }
+
+      setMessages(restoredMessages);
+      setImportedSets(restoredImported);
+      setHistoryIds(restoredHistoryIds);
+    }).catch(console.error);
+  }, [user]);
 
   const handleSend = () => {
     if (!input.trim() || loading) return;
@@ -58,6 +98,21 @@ export default function LeadGeneratorPage() {
     try {
       const result = await searchApollo(pendingPrompt, selectedCount);
 
+      // Save to search history immediately
+      let historyId = '';
+      try {
+        historyId = await saveSearchHistory({
+          userId: user!.id,
+          prompt: pendingPrompt,
+          leads: result.leads,
+          filters: result.filtersUsed,
+          totalFound: result.totalFound,
+          creditsUsed: result.creditsUsed,
+        });
+      } catch (e) {
+        console.error('Failed to save search history:', e);
+      }
+
       const botContent = result.leads.length > 0
         ? `Found ${result.totalFound.toLocaleString()} total matches. Showing ${result.leads.length} enriched contacts with verified contact info (${result.creditsUsed} credits used).`
         : 'No matching contacts found with verified contact information. Try broadening your search criteria.';
@@ -67,7 +122,15 @@ export default function LeadGeneratorPage() {
         content: botContent,
         leads: result.leads.length > 0 ? result.leads : undefined,
       };
+
+      // Capture current length before the state update to compute bot message index.
+      // At this point messages has: initial welcome + user msg just added = messages.length + 1.
+      // Bot msg will land at that index + 1, i.e. messages.length + 1.
+      const botIndex = messages.length + 1;
       setMessages(prev => [...prev, botMsg]);
+      if (historyId) {
+        setHistoryIds(prev => { const next = new Map(prev); next.set(botIndex, historyId); return next; });
+      }
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : 'An unexpected error occurred';
       setMessages(prev => [...prev, { role: 'bot', content: `Error: ${errorMsg}` }]);
@@ -83,6 +146,11 @@ export default function LeadGeneratorPage() {
     }));
     addLeads(cleanedLeads);
     setImportedSets(prev => new Set([...prev, msgIndex]));
+    // Mark search history entry as imported
+    const historyId = historyIds.get(msgIndex);
+    if (historyId) {
+      markSearchImported(historyId).catch(console.error);
+    }
   };
 
   const contactBadge = (lead: Lead) => {

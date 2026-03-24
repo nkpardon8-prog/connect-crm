@@ -3,7 +3,7 @@
 > Supabase PostgreSQL schema — tables, relationships, RLS policies, triggers, and conventions.
 
 **Status:** Active
-**Last Updated:** 2026-03-23
+**Last Updated:** 2026-03-24
 **Supabase Project:** `onthjkzdgsfvmgyhrorw` (CRM, us-east-1)
 **Related Docs:** [OVERVIEW.md](./OVERVIEW.md) | [data-model.md](./data-model.md) | [state-management.md](./state-management.md) | [architecture.md](./architecture.md)
 
@@ -291,6 +291,24 @@ Stores pending team member invitations. Consumed on successful signup.
 
 **Notes:** Tokens are single-use — `used` is set to `true` after the invited member completes signup. Expired or used tokens are rejected by the `signup-with-token` Edge Function.
 
+### lead_search_history
+Persists Lead Generator search results so chat history survives page navigation. A row is written immediately when Apollo returns results, before the user imports anything.
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| id | uuid | uuid_generate_v4() | Primary key |
+| user_id | uuid (FK → profiles, ON DELETE CASCADE) | — | User who ran the search |
+| prompt | text | — | Original free-text prompt entered by the user |
+| results | jsonb | — | Full array of enriched `Lead[]` objects returned by Apollo |
+| imported | boolean | false | Set to `true` when the user clicks "Import N as Cold Leads" |
+| created_at | timestamptz | now() | When the search was executed |
+
+**Indexes:** user_id, created_at
+
+**RLS:** Users can SELECT and INSERT their own rows (`user_id = auth.uid()`). UPDATE is permitted on own rows (for marking `imported = true`). No DELETE.
+
+**Usage pattern:** On `LeadGeneratorPage` mount, rows are queried for the current user ordered by `created_at` ASC and reconstructed into the chat message list. Un-imported rows restore with an active import button. On each new Apollo search, a row is inserted before the bot message is rendered.
+
 ### apollo_usage
 Tracks Apollo API credit consumption for circuit breaker enforcement.
 
@@ -348,6 +366,7 @@ function is_admin() returns boolean
 | email_sequences | Any authenticated | Any authenticated | — | — |
 | sequence_steps | Any authenticated | Any authenticated | — | — |
 | apollo_usage | Admin: all / Employee: own rows | Any authenticated | — | — |
+| lead_search_history | Own rows only | Own rows only | Own rows only (imported flag) | — |
 
 **Key security detail:** The `profiles_update_own` policy includes a `WITH CHECK` clause that prevents users from changing their own `role` field.
 
@@ -401,6 +420,7 @@ Deterministic UUIDs used for seed data, enabling repeatable seeding:
 | `suggestions.ts` | `getSuggestions`, `getSuggestionsByLead`, `dismissSuggestion` |
 | `campaigns.ts` | `getCampaigns`, `createCampaign` |
 | `sequences.ts` | `getSequences`, `getSequenceWithSteps` |
+| `search-history.ts` | `saveSearchHistory`, `getSearchHistory`, `markSearchHistoryImported` |
 
 All functions: query via Supabase client → transform snake_case → return camelCase typed objects.
 
@@ -533,3 +553,4 @@ The `process-campaigns` cron job is then registered as described in its Edge Fun
 | 2026-03-23 | Campaign Engine Phase 2a: campaign_enrollments table (per-recipient tracking), process-campaigns Edge Function, pg_cron scheduler setup | campaign_enrollments, supabase/functions/process-campaigns/ |
 | 2026-03-23 | Campaign Engine Phase 3b: `timezone` (text, nullable) and `engagement_score` (integer, default 0) added to leads; `smart_send` (boolean, default false) added to campaigns | leads, campaigns |
 | 2026-03-23 | Apollo phone reveal: apollo_id column added to leads for webhook matching; apollo-phone-webhook Edge Function added | leads table, supabase/functions/apollo-phone-webhook/ |
+| 2026-03-24 | lead_search_history table added: persists Apollo search results immediately on return, enables chat restore on navigation | lead_search_history, src/lib/api/search-history.ts |

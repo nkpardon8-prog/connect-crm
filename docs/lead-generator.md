@@ -3,7 +3,7 @@
 > Chat-based AI interface for discovering and importing leads into the CRM.
 
 **Status:** Active
-**Last Updated:** 2026-03-23
+**Last Updated:** 2026-03-24
 **Related Docs:** [OVERVIEW.md](./OVERVIEW.md) | [leads.md](./leads.md) | [state-management.md](./state-management.md)
 
 ---
@@ -18,10 +18,11 @@ The Lead Generator (`/generator`) provides a chat-style interface where users de
 
 | File | Purpose |
 |------|---------|
-| `src/pages/LeadGeneratorPage.tsx` | Entire feature — chat UI, Apollo search, import logic |
+| `src/pages/LeadGeneratorPage.tsx` | Entire feature — chat UI, Apollo search, import logic, search history restore |
 | `supabase/functions/apollo-search/index.ts` | Edge Function — LLM prompt parsing, Apollo search + enrichment, credit tracking |
 | `supabase/functions/apollo-phone-webhook/index.ts` | Edge Function — receives async phone reveal webhooks from Apollo, matches lead by apolloId, updates phone field |
 | `src/lib/api/apollo.ts` | Frontend API client — invokes apollo-search Edge Function, maps results |
+| `src/lib/api/search-history.ts` | API client — reads and writes rows to `lead_search_history` |
 
 ---
 
@@ -60,13 +61,21 @@ The Lead Generator (`/generator`) provides a chat-style interface where users de
    - Text: "Found N contacts matching your criteria. Here's the list:"
    - Table: Name, Title, Company, Location, Email, Contact Score
    - Import button: "Import N as Cold Leads"
+   - Search results are immediately persisted to `lead_search_history` in Supabase
+     on return from Apollo — before the user takes any action
 
 8. User clicks "Import N as Cold Leads"
    → Leads assigned to current user
    → Persisted to Supabase via addLeads() mutation
    → Button changes to "Imported to CRM" (disabled)
+   → The corresponding `lead_search_history` row is marked imported
 
 9. User can continue chatting to generate more batches
+
+10. On page navigation away and back, the full chat history is restored from
+    `lead_search_history`. Un-imported result sets are restored with their
+    "Import N as Cold Leads" button still active — results remain importable
+    across navigations.
 ```
 
 ### Chat Message Types
@@ -142,20 +151,23 @@ const handleImport = (leads: Lead[], msgIndex: number) => {
 **State:**
 | State | Type | Purpose |
 |-------|------|---------|
-| `messages` | `ChatMessage[]` | Chat history (initialized with bot welcome) |
+| `messages` | `ChatMessage[]` | Chat history (initialized with bot welcome, then restored from DB on mount) |
 | `input` | `string` | Current input field value |
-| `loading` | `boolean` | Shows loading indicator during fake delay |
+| `loading` | `boolean` | Shows loading indicator during search |
 | `importedSets` | `Set<number>` | Message indices that have been imported |
 
 **Functions:**
-- `handleSend()` — adds user message, shows confirmation dialog, invokes Edge Function, adds bot response
-- `handleImport(leads, msgIndex)` — assigns leads to user, adds to CRM, marks as imported
+- `handleSend()` — adds user message, shows confirmation dialog, invokes Edge Function, persists results to `lead_search_history`, adds bot response
+- `handleImport(leads, msgIndex)` — assigns leads to user, adds to CRM, marks search history row as imported, marks message as imported
+
+**On mount:** Loads prior search history rows for the current user from `lead_search_history`, ordered by `created_at` ascending, and reconstructs the chat message list. Un-imported rows restore with an active import button.
 
 ### Hook Mutations Used
 - `addLeads(leads)` — persists imported leads to Supabase
 
-### API Client Used
+### API Clients Used
 - `src/lib/api/apollo.ts` — `searchLeadsViaApollo(prompt)` — calls the `apollo-search` Edge Function and maps results to `Lead[]`
+- `src/lib/api/search-history.ts` — `saveSearchHistory(row)`, `getSearchHistory(userId)`, `markSearchHistoryImported(id)` — reads and writes `lead_search_history` rows
 
 ---
 
@@ -166,6 +178,8 @@ const handleImport = (leads: Lead[], msgIndex: number) => {
 | Current User | `useAuth().user` | Lead assignment on import |
 | addLeads | `useLeads().addLeads` | Importing leads into Supabase |
 | Apollo search + enrichment | `src/lib/api/apollo.ts` → `apollo-search` Edge Function | Real lead discovery |
+| Search history (read) | `src/lib/api/search-history.ts` → `lead_search_history` table | Restoring chat on page navigation |
+| Search history (write) | `src/lib/api/search-history.ts` → `lead_search_history` table | Persisting results immediately on return from Apollo |
 
 ---
 
@@ -201,3 +215,4 @@ const handleImport = (leads: Lead[], msgIndex: number) => {
 | 2026-03-23 | Apollo.io integration: real search, enrichment, contact scoring, circuit breakers | `LeadGeneratorPage.tsx`, `apollo.ts`, Edge Function |
 | 2026-03-23 | apollo-search Edge Function implemented — real Apollo search, enrichment, ZeroBounce validation, credit logging | Edge Function, apollo.ts |
 | 2026-03-23 | Phone number reveal: async webhook from Apollo, apolloId tracking, pending indicator | apollo-search, apollo-phone-webhook, LeadGeneratorPage |
+| 2026-03-24 | Search history persistence: results saved to DB immediately, chat restores on navigation | `LeadGeneratorPage.tsx`, `search-history.ts` |
