@@ -795,6 +795,29 @@ export type Database = {
         }
         Relationships: []
       }
+      phone_reveals: {
+        Row: {
+          apollo_id: string
+          phone: string
+          raw_data: Record<string, unknown> | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          apollo_id: string
+          phone: string
+          raw_data?: Record<string, unknown> | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          apollo_id?: string
+          phone?: string
+          raw_data?: Record<string, unknown> | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       sequence_steps: {
         Row: {
           body: string

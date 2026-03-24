@@ -72,3 +72,22 @@ export async function deleteLead(id: string): Promise<void> {
 
   if (error) throw error;
 }
+
+export async function mergePhoneReveals(leads: Array<{ apolloId?: string | null; phone?: string }>): Promise<void> {
+  const apolloIds = leads.map(l => l.apolloId).filter(Boolean) as string[]
+  if (apolloIds.length === 0) return
+
+  const { data: reveals } = await supabase
+    .from('phone_reveals')
+    .select('apollo_id, phone')
+    .in('apollo_id', apolloIds)
+
+  if (!reveals || reveals.length === 0) return
+
+  const phoneMap = new Map(reveals.map(r => [r.apollo_id, r.phone]))
+  for (const lead of leads) {
+    if (lead.apolloId && !lead.phone && phoneMap.has(lead.apolloId)) {
+      lead.phone = phoneMap.get(lead.apolloId)!
+    }
+  }
+}

@@ -202,6 +202,32 @@ async function runApolloSearch(
     }
   }
 
+  // Step 3.5: Check phone_reveals buffer for phones from prior searches
+  if (supabaseAdmin) {
+    const enrichedApolloIds = enriched
+      .map((p: Record<string, unknown>) => p.id as string)
+      .filter(Boolean)
+
+    if (enrichedApolloIds.length > 0) {
+      const { data: reveals } = await supabaseAdmin
+        .from('phone_reveals')
+        .select('apollo_id, phone')
+        .in('apollo_id', enrichedApolloIds)
+
+      if (reveals && reveals.length > 0) {
+        const phoneMap = new Map(reveals.map((r: { apollo_id: string; phone: string }) => [r.apollo_id, r.phone]))
+        for (const person of enriched) {
+          const p = person as Record<string, unknown>
+          const bufferedPhone = phoneMap.get(p.id as string)
+          if (bufferedPhone && !((p.phone_numbers as Array<{sanitized_number?: string}> | undefined)?.[0]?.sanitized_number)) {
+            p.phone_numbers = [{ sanitized_number: bufferedPhone }]
+          }
+        }
+        console.log(`Phone buffer: merged ${reveals.length} phones from prior searches`)
+      }
+    }
+  }
+
   // Step 4: Filter invalid + transform
   for (const person of enriched) {
     const p = person as Record<string, unknown>

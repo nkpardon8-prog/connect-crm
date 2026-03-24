@@ -17,6 +17,7 @@ Deno.serve(async (req) => {
     console.log(`Apollo phone webhook received: ${people.length} people`)
 
     let updated = 0
+    let buffered = 0
     for (const person of people) {
       const apolloId = person.id
       const phoneNumbers = person.phone_numbers || []
@@ -32,7 +33,22 @@ Deno.serve(async (req) => {
 
       if (!phone) continue
 
-      // Update the lead by apollo_id
+      // Buffer the phone reveal so data is preserved even if the lead isn't imported yet
+      const { error: bufferError } = await supabaseAdmin.from('phone_reveals').upsert({
+        apollo_id: apolloId,
+        phone: phone,
+        raw_data: { phone_numbers: phoneNumbers },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'apollo_id' })
+
+      if (bufferError) {
+        console.error(`Failed to buffer phone for apollo_id ${apolloId}:`, bufferError)
+      } else {
+        buffered++
+        console.log(`Buffered phone for apollo_id ${apolloId}`)
+      }
+
+      // Update the lead by apollo_id (may be a no-op if lead isn't imported yet)
       const { data, error } = await supabaseAdmin.from('leads')
         .update({ phone })
         .eq('apollo_id', apolloId)
@@ -48,8 +64,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`Phone webhook complete: ${updated} of ${people.length} leads updated`)
-    return new Response(JSON.stringify({ updated, total: people.length }), {
+    console.log(`Phone webhook complete: ${buffered} buffered, ${updated} of ${people.length} leads updated`)
+    return new Response(JSON.stringify({ buffered, updated, total: people.length }), {
       headers: { 'Content-Type': 'application/json' },
     })
   } catch (err) {

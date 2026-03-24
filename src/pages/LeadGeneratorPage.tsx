@@ -23,6 +23,7 @@ interface ChatMessage {
   content: string;
   leads?: SearchLead[];
   actions?: { label: string; prompt: string }[];
+  fromHistory?: boolean;
 }
 
 export default function LeadGeneratorPage() {
@@ -68,6 +69,7 @@ export default function LeadGeneratorPage() {
           content: botContent,
           leads: entry.leads.length > 0 ? entry.leads : undefined,
           actions: entry.leads.length > 0 ? standardResultActions : undefined,
+          fromHistory: true,
         });
         // Track history ID for this bot message
         restoredHistoryIds.set(botIndex, entry.id);
@@ -228,8 +230,10 @@ export default function LeadGeneratorPage() {
                             <TableCell className="text-xs">
                               {l.phone ? (
                                 <span className="flex items-center gap-1"><Phone className="h-3 w-3 text-muted-foreground" />{l.phone}</span>
-                              ) : (
+                              ) : msg.fromHistory ? (
                                 <span className="text-muted-foreground">—</span>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground italic">Pending</span>
                               )}
                             </TableCell>
                             <TableCell className="text-xs">{l.location}</TableCell>

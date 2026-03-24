@@ -30,8 +30,10 @@ export function useLeads() {
   });
 
   const addLeadsMutation = useMutation({
-    mutationFn: (newLeads: Omit<Lead, 'id' | 'createdAt'>[]) =>
-      api.createLeads(newLeads),
+    mutationFn: async (newLeads: Omit<Lead, 'id' | 'createdAt'>[]) => {
+      await api.mergePhoneReveals(newLeads)
+      return api.createLeads(newLeads)
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leads'] }),
   });
 
