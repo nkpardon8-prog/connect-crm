@@ -134,76 +134,9 @@ Single-email composition form.
 
 ### Tab: Campaigns
 
-#### Mode Toggle
-Switch between "AI Assistant" and "Manual" modes via toggle buttons at the top.
+The Campaigns tab now shows the `CampaignList` component and a "New Campaign" button. The old inline manual/AI mode creation flow has been removed and replaced by the dedicated campaign builder at `/outreach/campaign/new`.
 
-#### AI Mode (CampaignAIChat Component)
-
-The `CampaignAIChat` component provides a chat interface for campaign creation.
-
-**Props:**
-```typescript
-interface CampaignAIChatProps {
-  leads: Lead[];           // All available leads
-  industries: string[];    // Unique industries for filtering
-  onApplyResult: (result: {
-    matchedLeadIds: string[];
-    subject: string;
-    body: string;
-    statusFilter?: string;
-    industryFilter?: string;
-  }) => void;
-}
-```
-
-**How AI parsing works** (LLM-based flow):
-
-`CampaignAIChat` calls `generateCampaignCopy()` from `@/lib/api/campaign-ai`, which invokes the `campaign-ai` Supabase Edge Function. That Edge Function proxies the request to DeepSeek V3.2 via OpenRouter.
-
-1. The component builds a lead summary array (id, name, company, status, industry only — no sensitive fields) and sends it alongside the user's prompt and the full conversation history
-2. The LLM parses the prompt semantically — no keyword matching — and selects matching leads intelligently based on context
-3. The LLM generates contextual email copy (subject + body) with merge fields: `{{firstName}}`, `{{company}}`
-4. Follow-up messages in the same chat session work because the full conversation history is forwarded to the LLM on every turn
-5. An empty `matchedLeadIds` array in the response means "all leads" — the frontend interprets this as selecting all available leads
-
-**After AI returns result:**
-- Parent page shows a compose card with:
-  - Recipient count
-  - Subject (editable)
-  - Body (editable)
-  - "Send to X recipients" button
-
-#### Manual Mode (Two-Step Workflow)
-
-**Step 1 — Select Recipients:**
-- Search bar (filters by name, company, email)
-- Status filter dropdown (All, Cold, Lukewarm, Warm, Dead)
-- Industry filter dropdown (dynamically populated from leads)
-- Table with checkboxes for each lead
-- Select-all checkbox in header
-- Selected count badge
-- "Next" button to proceed to compose
-
-> **Email status filtering:** The available recipient pool (both in manual mode and the compose To: autocomplete) is pre-filtered to only include leads with `email_status` of `'verified'` or `'likely_to_engage'`. Leads with status `'unverified'`, `'guessed'`, `'extrapolated'`, or `'invalid'` are excluded from campaign and compose recipient selection to reduce bounce rates.
-
-**Step 2 — Compose:**
-- Subject input
-- Body textarea
-- Merge field documentation: `{{firstName}}`, `{{company}}`
-- "Send to X recipients" button
-- "Back" button to return to selection
-
-#### Campaign Send Logic (Both Modes)
-
-When "Send to X recipients" is clicked:
-1. For each recipient lead:
-   - Create `EmailMessage` with subject/body (merge fields replaced)
-   - Merge field replacement: `{{firstName}}` → `lead.firstName`, `{{company}}` → `lead.company`
-2. Bulk send dispatched via Resend's batch API — all personalised messages are submitted in a single batch request rather than individual API calls
-3. Create `Campaign` record with all recipient IDs
-4. Add campaign to context via `addCampaign()`
-5. Clear form state
-6. Show success toast
+> **Note:** The CampaignAIChat (AI mode) and the two-step manual recipient-selection + compose flow that previously lived inline in this tab have been replaced by the multi-step CampaignBuilderPage. See [campaigns.md](./campaigns.md) for full builder documentation.
 
 #### Campaign Management List (CampaignList Component)
 
@@ -356,3 +289,4 @@ No CRUD operations — sequences are read-only.
 | 2026-03-23 | Email UI redesign: Gmail-style message cards, formatting toolbar on reply/compose, dual-mode To field (lead search + raw email) | OutreachPage.tsx |
 | 2026-03-23 | Gmail-style folder sidebar: Inbox/Sent/All Mail filters in the inbox tab | OutreachPage.tsx |
 | 2026-03-23 | Campaign Engine Phase 1a: management list with analytics, detail page, cloning, unsubscribe infrastructure | OutreachPage.tsx, CampaignList, CampaignDetailPage, send-email |
+| 2026-03-23 | Campaigns tab simplified — old manual/AI mode replaced by campaign builder at /outreach/campaign/new | OutreachPage.tsx |

@@ -400,6 +400,7 @@ Supabase Edge Functions provide server-side compute for operations that require 
 | `signup-with-token` | `supabase/functions/signup-with-token/index.ts` | Public: validates invite token (exists, not used, not expired), calls `supabase.auth.admin.createUser` with the provided password, marks the invite as `used = true`, returns session tokens for auto-login | — |
 | `delete-member` | `supabase/functions/delete-member/index.ts` | Admin-only: deletes a user from `auth.users` (cascades to `profiles`); `ON DELETE SET NULL` on `leads.assigned_to` and `deals.assigned_to` ensures their records are preserved unassigned | — |
 | `unsubscribe` | `supabase/functions/unsubscribe/index.ts` | Public endpoint (no auth): validates token from query param, inserts row into `unsubscribes`, returns confirmation page | — |
+| `generate-template` | `supabase/functions/generate-template/index.ts` | Generates or improves email templates via GPT-4.1-mini; temperature 0.7 for generation from description, 0.5 for cleanup of existing content | OpenRouter (GPT-4.1-mini) |
 
 ### campaign-ai
 
@@ -471,3 +472,4 @@ Public endpoint (no auth required). Accepts a `token` query parameter (and optio
 | 2026-03-23 | email-events Edge Function now handles inbound email (email.received) | supabase/functions/email-events/ |
 | 2026-03-23 | Team management: invites table, create-invite / signup-with-token / delete-member Edge Functions, FK changes (leads.assigned_to, deals.assigned_to now ON DELETE SET NULL) | invites table, supabase/functions/ |
 | 2026-03-23 | Campaign Engine Phase 1a: new columns on campaigns (name, status, scheduled_at, drip_config, variant_b_subject, variant_b_body, ab_test_enabled, sequence_id), campaign_id FK on emails, new tables (unsubscribes, campaign_templates, campaign_sequences, campaign_steps), unsubscribe Edge Function | campaigns, emails, supabase/functions/ |
+| 2026-03-23 | Campaign Engine Phase 1b: generate-template Edge Function (GPT-4.1-mini via OpenRouter) for AI template generation and cleanup | supabase/functions/generate-template/ |

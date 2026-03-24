@@ -1,13 +1,13 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLeads } from '@/hooks/use-leads';
 import { useEmails } from '@/hooks/use-emails';
 import { useActivities } from '@/hooks/use-activities';
-import { useCampaigns } from '@/hooks/use-campaigns';
 import { useProfiles } from '@/hooks/use-profiles';
 import { useSequences } from '@/hooks/use-sequences';
 import { useQueryClient } from '@tanstack/react-query';
-import { sendEmail, sendBulkEmails } from '@/lib/api/send-email';
+import { sendEmail } from '@/lib/api/send-email';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,21 +15,11 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, RefreshCw, Inbox, PenLine, Layers, Clock, Mail, MailOpen, Megaphone, ArrowRight, ArrowLeft, Users, ChevronDown, ChevronRight, Bot, Pencil, Reply, Forward, MailCheck, MailX, ArrowUpRight, Eye, MousePointerClick, AlertTriangle, Bold, Italic, Link2, List } from 'lucide-react';
-import type { LeadStatus, EmailMessage } from '@/types/crm';
-import CampaignAIChat from '@/components/outreach/CampaignAIChat';
+import { Send, RefreshCw, Inbox, PenLine, Layers, Clock, Mail, Megaphone, ArrowLeft, Reply, Forward, ArrowUpRight, Eye, MousePointerClick, AlertTriangle, Bold, Italic, Link2, List, Plus } from 'lucide-react';
+import type { EmailMessage } from '@/types/crm';
 import CampaignList from '@/components/campaigns/CampaignList';
 
-const statusColors: Record<LeadStatus, string> = {
-  cold: 'bg-blue-100 text-blue-700',
-  lukewarm: 'bg-amber-100 text-amber-700',
-  warm: 'bg-orange-100 text-orange-700',
-  dead: 'bg-red-100 text-red-700',
-};
 
 interface EmailThread {
   id: string;
@@ -42,6 +32,7 @@ interface EmailThread {
 }
 
 export default function OutreachPage() {
+  const navigate = useNavigate();
   const { emails, addEmail, addEmailAsync, markEmailRead, isLoading: emailsLoading, isFetching } = useEmails();
   const { leads } = useLeads();
   const emailSafeLeads = useMemo(() =>
@@ -51,7 +42,6 @@ export default function OutreachPage() {
     [leads]
   );
   const { addActivity } = useActivities();
-  const { campaigns, addCampaignAsync } = useCampaigns();
   const { profiles } = useProfiles();
   const { sequences } = useSequences();
   const { user } = useAuth();
@@ -73,16 +63,6 @@ export default function OutreachPage() {
   const [body, setBody] = useState('');
   const [toEmail, setToEmail] = useState('');
 
-  // Campaign state
-  const [campaignStep, setCampaignStep] = useState<'select' | 'compose'>('select');
-  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [industryFilter, setIndustryFilter] = useState<string>('all');
-  const [campaignSearch, setCampaignSearch] = useState('');
-  const [campaignSubject, setCampaignSubject] = useState('');
-  const [campaignBody, setCampaignBody] = useState('');
-  const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
-  const [campaignMode, setCampaignMode] = useState<'manual' | 'ai'>('ai');
 
   // Build threads from emails
   const threads = useMemo<EmailThread[]>(() => {
@@ -145,46 +125,6 @@ export default function OutreachPage() {
       l.company.toLowerCase().includes(q)
     ).slice(0, 10);
   }, [emailSafeLeads, toSearch]);
-
-  const industries = useMemo(() => [...new Set(emailSafeLeads.map(l => l.industry).filter(Boolean))], [emailSafeLeads]);
-
-  const filteredLeads = useMemo(() => {
-    return emailSafeLeads.filter(l => {
-      if (statusFilter !== 'all' && l.status !== statusFilter) return false;
-      if (industryFilter !== 'all' && l.industry !== industryFilter) return false;
-      if (campaignSearch) {
-        const q = campaignSearch.toLowerCase();
-        if (
-          !l.firstName.toLowerCase().includes(q) &&
-          !l.lastName.toLowerCase().includes(q) &&
-          !l.company.toLowerCase().includes(q) &&
-          !l.email.toLowerCase().includes(q)
-        ) return false;
-      }
-      return true;
-    });
-  }, [emailSafeLeads, statusFilter, industryFilter, campaignSearch]);
-
-  const allFilteredSelected = filteredLeads.length > 0 && filteredLeads.every(l => selectedLeadIds.has(l.id));
-
-  const toggleSelectAll = () => {
-    if (allFilteredSelected) {
-      const newSet = new Set(selectedLeadIds);
-      filteredLeads.forEach(l => newSet.delete(l.id));
-      setSelectedLeadIds(newSet);
-    } else {
-      const newSet = new Set(selectedLeadIds);
-      filteredLeads.forEach(l => newSet.add(l.id));
-      setSelectedLeadIds(newSet);
-    }
-  };
-
-  const toggleLead = (id: string) => {
-    const newSet = new Set(selectedLeadIds);
-    if (newSet.has(id)) newSet.delete(id);
-    else newSet.add(id);
-    setSelectedLeadIds(newSet);
-  };
 
   const handleSelectThread = (thread: EmailThread) => {
     setSelectedThreadId(thread.id);
@@ -280,71 +220,6 @@ export default function OutreachPage() {
       toast.success('Email sent');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to send email');
-    }
-  };
-
-  const handleSendCampaign = async () => {
-    if (selectedLeadIds.size === 0 || !campaignSubject.trim() || !campaignBody.trim()) return;
-    if (!user?.sendingEmail) {
-      toast.error('Set your sending email in Settings before sending');
-      return;
-    }
-    const safeIds = new Set(emailSafeLeads.map(l => l.id));
-    const recipientIds = Array.from(selectedLeadIds).filter(id => safeIds.has(id));
-    const now = new Date().toISOString();
-
-    try {
-      const campaign = await addCampaignAsync({
-        subject: campaignSubject.trim(),
-        body: campaignBody.trim(),
-        recipientIds,
-        sentAt: now,
-        sentBy: user!.id,
-      });
-
-      // Send via Resend batch API instead of individual DB inserts
-      const campaignEmails = recipientIds.map(leadId => {
-        const lead = leads.find(l => l.id === leadId);
-        if (!lead) return null;
-        return {
-          leadId,
-          from: user!.sendingEmail!,
-          fromName: user!.name,
-          to: lead.email,
-          subject: campaignSubject.trim()
-            .replace('{{firstName}}', lead.firstName)
-            .replace('{{company}}', lead.company),
-          body: campaignBody.trim()
-            .replace(/\{\{firstName\}\}/g, lead.firstName)
-            .replace(/\{\{company\}\}/g, lead.company),
-          threadId: `t-camp-${Date.now()}-${leadId}`,
-        };
-      }).filter(Boolean) as Array<{leadId: string; from: string; fromName: string; to: string; subject: string; body: string; threadId: string}>;
-
-      const result = await sendBulkEmails(campaignEmails, campaign.id);
-      if (result?.failedCount > 0) {
-        toast.warning(`${result.failedCount} of ${campaignEmails.length} emails failed to send`);
-      }
-
-      // Log activities for sent emails
-      for (const leadId of recipientIds) {
-        addActivity({
-          leadId,
-          userId: user!.id,
-          type: 'email_sent',
-          description: `Campaign email: "${campaignSubject.trim()}"`,
-          timestamp: now,
-        });
-      }
-
-      queryClient.invalidateQueries({ queryKey: ['emails'] });
-      setCampaignSubject('');
-      setCampaignBody('');
-      setSelectedLeadIds(new Set());
-      setCampaignStep('select');
-      toast.success(`Campaign sent to ${campaignEmails.length} recipients`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to send campaign');
     }
   };
 
@@ -711,188 +586,15 @@ export default function OutreachPage() {
 
         {/* ===== CAMPAIGNS ===== */}
         <TabsContent value="campaigns" className="mt-4 space-y-4">
-          {/* Mode toggle */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant={campaignMode === 'ai' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setCampaignMode('ai')}
-              className="gap-1.5"
-            >
-              <Bot className="h-3.5 w-3.5" /> AI Assistant
-            </Button>
-            <Button
-              variant={campaignMode === 'manual' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setCampaignMode('manual')}
-              className="gap-1.5"
-            >
-              <Pencil className="h-3.5 w-3.5" /> Manual
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold">Campaigns</h3>
+              <p className="text-xs text-muted-foreground">Create and manage email campaigns</p>
+            </div>
+            <Button onClick={() => navigate('/outreach/campaign/new')} className="gap-1.5">
+              <Plus className="h-4 w-4" /> New Campaign
             </Button>
           </div>
-
-          {/* AI Mode */}
-          {campaignMode === 'ai' && (
-            <>
-              <CampaignAIChat
-                leads={emailSafeLeads}
-                industries={industries}
-                onApplyResult={(result) => {
-                  setSelectedLeadIds(new Set(result.matchedLeadIds));
-                  setCampaignSubject(result.subject);
-                  setCampaignBody(result.body);
-                  if (result.statusFilter) setStatusFilter(result.statusFilter);
-                  else setStatusFilter('all');
-                  if (result.industryFilter) setIndustryFilter(result.industryFilter);
-                  else setIndustryFilter('all');
-                  setCampaignStep('compose');
-                }}
-              />
-
-              {campaignStep === 'compose' && selectedLeadIds.size > 0 && (
-                <Card className="border shadow-sm">
-                  <CardContent className="p-5 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-foreground">AI-Generated Campaign</h3>
-                      <Badge variant="secondary" className="gap-1">
-                        <Users className="h-3 w-3" />
-                        {selectedLeadIds.size} recipients
-                      </Badge>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Subject</label>
-                      <Input value={campaignSubject} onChange={e => setCampaignSubject(e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Body</label>
-                      <Textarea value={campaignBody} onChange={e => setCampaignBody(e.target.value)} className="min-h-[160px]" />
-                      <p className="text-xs text-muted-foreground">
-                        Merge fields: <code className="bg-muted px-1 py-0.5 rounded text-[11px]">{'{{firstName}}'}</code>{' '}
-                        <code className="bg-muted px-1 py-0.5 rounded text-[11px]">{'{{company}}'}</code>
-                      </p>
-                    </div>
-                    <Button onClick={handleSendCampaign} disabled={!campaignSubject.trim() || !campaignBody.trim()} className="gap-1.5">
-                      <Send className="h-4 w-4" /> Send to {selectedLeadIds.size} recipients
-                    </Button>
-                  </CardContent>
-                </Card>
-              )}
-            </>
-          )}
-
-          {/* Manual Mode */}
-          {campaignMode === 'manual' && campaignStep === 'select' && (
-            <>
-              {leads.length > emailSafeLeads.length && (
-                <p className="text-xs text-muted-foreground">
-                  Showing {emailSafeLeads.length} of {leads.length} leads with verified email addresses
-                </p>
-              )}
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold text-foreground">Select Recipients</h2>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="gap-1">
-                    <Users className="h-3 w-3" />
-                    {selectedLeadIds.size} selected
-                  </Badge>
-                  <Button size="sm" disabled={selectedLeadIds.size === 0} onClick={() => setCampaignStep('compose')} className="gap-1.5">
-                    Next <ArrowRight className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <Input placeholder="Search by name, company, or email..." value={campaignSearch} onChange={e => setCampaignSearch(e.target.value)} className="max-w-[280px] h-9" />
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[150px] h-9"><SelectValue placeholder="Status" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="cold">Cold</SelectItem>
-                    <SelectItem value="lukewarm">Lukewarm</SelectItem>
-                    <SelectItem value="warm">Warm</SelectItem>
-                    <SelectItem value="dead">Dead</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={industryFilter} onValueChange={setIndustryFilter}>
-                  <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Industry" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Industries</SelectItem>
-                    {industries.map(ind => (
-                      <SelectItem key={ind} value={ind}>{ind}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <Card className="border shadow-sm">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[40px]"><Checkbox checked={allFilteredSelected} onCheckedChange={toggleSelectAll} /></TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Company</TableHead>
-                      <TableHead>Industry</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredLeads.map(lead => (
-                      <TableRow key={lead.id} className="cursor-pointer" onClick={() => toggleLead(lead.id)}>
-                        <TableCell><Checkbox checked={selectedLeadIds.has(lead.id)} onCheckedChange={() => toggleLead(lead.id)} onClick={e => e.stopPropagation()} /></TableCell>
-                        <TableCell className="font-medium text-foreground">{lead.firstName} {lead.lastName}</TableCell>
-                        <TableCell className="text-muted-foreground">{lead.email}</TableCell>
-                        <TableCell className="text-muted-foreground">{lead.company}</TableCell>
-                        <TableCell className="text-muted-foreground">{lead.industry}</TableCell>
-                        <TableCell>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[lead.status]}`}>
-                            {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {filteredLeads.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No leads match your filters</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </Card>
-            </>
-          )}
-
-          {campaignMode === 'manual' && campaignStep === 'compose' && (
-            <>
-              <div className="flex items-center gap-3">
-                <Button variant="ghost" size="sm" onClick={() => setCampaignStep('select')} className="gap-1.5"><ArrowLeft className="h-3.5 w-3.5" /> Back</Button>
-                <h2 className="text-base font-semibold text-foreground">Compose Campaign</h2>
-                <Badge variant="secondary" className="gap-1"><Users className="h-3 w-3" />{selectedLeadIds.size} recipients</Badge>
-              </div>
-
-              <Card className="border shadow-sm">
-                <CardContent className="p-5 space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Subject</label>
-                    <Input placeholder="Campaign subject line..." value={campaignSubject} onChange={e => setCampaignSubject(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Body</label>
-                    <Textarea placeholder="Write your campaign email..." value={campaignBody} onChange={e => setCampaignBody(e.target.value)} className="min-h-[200px]" />
-                    <p className="text-xs text-muted-foreground">
-                      Merge fields: <code className="bg-muted px-1 py-0.5 rounded text-[11px]">{'{{firstName}}'}</code>{' '}
-                      <code className="bg-muted px-1 py-0.5 rounded text-[11px]">{'{{company}}'}</code>
-                    </p>
-                  </div>
-                  <Button onClick={handleSendCampaign} disabled={!campaignSubject.trim() || !campaignBody.trim()} className="gap-1.5">
-                    <Send className="h-4 w-4" /> Send to {selectedLeadIds.size} recipients
-                  </Button>
-                </CardContent>
-              </Card>
-            </>
-          )}
-
-          {/* Campaign history */}
           <CampaignList />
         </TabsContent>
 

@@ -2,7 +2,7 @@
 
 > Campaign management dashboard with analytics, unsubscribe infrastructure, and template support.
 
-**Status:** Active (Phase 1a complete — Phase 1b pending)
+**Status:** Active (Phase 1b complete — Phase 2 pending)
 **Last Updated:** 2026-03-23
 **Related Docs:** [OVERVIEW.md](./OVERVIEW.md) | [outreach.md](./outreach.md) | [schema.md](./schema.md)
 
@@ -40,6 +40,28 @@ The campaign engine provides a full campaign management dashboard within the Out
 - Unsubscribe Edge Function handles token validation + record creation
 - Unsubscribed leads excluded from future campaign recipient selection
 
+### Campaign Builder
+- Route: `/outreach/campaign/new`
+- Multi-step form: Name + Audience → Template → Preview → Send/Draft
+- Integrates AudienceSelector and TemplateEditor components
+
+### Template Library
+- Save, load, and delete reusable email templates
+- Backed by the `campaign_templates` table (user-scoped via `created_by`)
+- Accessible from within the TemplateEditor
+
+### AI Template Generation
+- Powered by GPT-4.1-mini via OpenRouter (`generate-template` Edge Function)
+- Generate from description: temperature 0.7 (creative generation)
+- Cleanup/improve existing content: temperature 0.5 (conservative edits)
+
+### TemplateEditor
+- Rich editing with AI Generate, AI Improve, Template Library, Save to Library, and formatting toolbar
+
+### AudienceSelector
+- Lead filtering by search, status, and industry with checkbox selection
+- Excludes unsubscribed leads from the selectable pool
+
 ### Analytics
 - Computed from `emails` table via `campaign_id` foreign key
 - Metrics: sent count, opened count + rate, clicked count, bounced count, unsubscribed count
@@ -75,13 +97,14 @@ Tracks unsubscribed leads. Token-based lookup. Indexed on lead_id and email.
 |----------|---------|
 | `send-email` | Batch sends now include campaign_id on email rows + inject {{unsubscribeLink}} |
 | `unsubscribe` | Public endpoint — validates token, inserts unsubscribe record |
+| `generate-template` | Generates or improves email templates via GPT-4.1-mini (OpenRouter); temp 0.7 for generation, 0.5 for cleanup |
 
 ---
 
 ## Phase Roadmap
 
 - **Phase 1a (complete):** DB schema, campaign list + analytics, detail page, unsubscribe infrastructure, cloning
-- **Phase 1b (next):** Multi-step campaign builder, template library, AI template generation
+- **Phase 1b (complete):** Multi-step campaign builder, template library, AI template generation (GPT-4.1-mini), audience selector
 - **Phase 2:** Scheduling, drip sends, follow-up sequences, suspend/resume/edit
 - **Phase 3:** Apollo auto-gen pipeline, A/B test execution, smart send timing, lead engagement scoring
 
@@ -92,3 +115,4 @@ Tracks unsubscribed leads. Token-based lookup. Indexed on lead_id and email.
 | Date | Change | Files Affected |
 |------|--------|----------------|
 | 2026-03-23 | Campaign Engine Phase 1a: DB schema, campaign list, analytics, detail page, unsubscribe, cloning | All campaign files |
+| 2026-03-23 | Campaign Engine Phase 1b: builder, templates, AI generation (GPT-4.1-mini), audience selector | CampaignBuilderPage, TemplateEditor, AudienceSelector, TemplateLibrary, generate-template |
