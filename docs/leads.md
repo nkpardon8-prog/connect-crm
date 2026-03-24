@@ -92,6 +92,7 @@ Both actions use `event.stopPropagation()` to prevent row navigation.
 - Lead name (`firstName lastName`)
 - Job title
 - Status dropdown (Select component) — changing status triggers:
+- **Edit / Save / Cancel buttons** — toggling Edit mode makes all contact fields (name, company, job title, phone, email, location, etc.) editable inline; Save persists via `updateLead()`; Cancel discards changes
   1. `updateLead(id, { status })` — updates the lead
   2. `addActivity()` — creates `status_change` activity with description "Status changed to [Label]"
 
@@ -203,7 +204,7 @@ const visibleLeads = useMemo(() => {
 
 ## Known Limitations & TODOs
 
-- No lead field editing (name, company, phone, email, etc.) — only status can be changed
+- Lead field editing is available on the detail page (Edit/Save/Cancel buttons); only status can be changed from the list view
 - No lead creation UI (leads only come from Lead Generator import or mock data)
 - No lead deletion
 - No sorting on table columns
@@ -236,3 +237,4 @@ const visibleLeads = useMemo(() => {
 | 2026-03-23 | Data from Supabase, role filtering via RLS, mockUsers replaced | `LeadsPage.tsx`, `LeadDetailPage.tsx` |
 | 2026-03-23 | Email status badge added to leads table (Verified/Guessed/Unverified/Invalid) | LeadsPage.tsx, LeadDetailPage.tsx |
 | 2026-03-23 | Engagement score badge added to leads table and detail page (opens×1 + clicks×3 + replies×5); `timezone` field added to lead contact card (sourced from Apollo import, used by Smart Send Timing) | LeadsPage.tsx, LeadDetailPage.tsx |
+| 2026-03-23 | Lead editing: all fields editable on detail page with Edit/Save/Cancel | LeadDetailPage.tsx |

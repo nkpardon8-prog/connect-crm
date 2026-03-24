@@ -3,7 +3,7 @@
 > Kanban board for managing deals through 7 sales stages with drag-and-drop.
 
 **Status:** Active
-**Last Updated:** 2026-03-22
+**Last Updated:** 2026-03-23
 **Related Docs:** [OVERVIEW.md](./OVERVIEW.md) | [state-management.md](./state-management.md) | [data-model.md](./data-model.md) | [leads.md](./leads.md)
 
 ---
@@ -40,6 +40,7 @@ The Pipeline page (`/pipeline`) displays all deals in a horizontal Kanban board 
 - Title: "Pipeline"
 - Subtitle: `[N] deals · $[X] active pipeline`
 - Active pipeline value = sum of all deal values **excluding** `closed_won` and `closed_lost` stages
+- **"+ New Deal" button** — opens a dialog with fields: lead selector (dropdown of all leads), title, value, and stage; on submit calls `createDeal()` and closes the dialog
 
 ### Column Layout
 - Fixed-width columns: 240px each
@@ -100,18 +101,22 @@ onDrop={() => handleDrop(stage.key)}           // Update deal stage
 | State | Type | Purpose |
 |-------|------|---------|
 | `draggedDeal` | `string \| null` | ID of deal currently being dragged |
+| `newDealOpen` | `boolean` | Controls "+ New Deal" dialog visibility |
+| `newDeal` | object | Form state for the new deal dialog (leadId, title, value, stage) |
 
 **Functions:**
 - `handleDragStart(dealId)` — stores deal ID in state
 - `handleDragEnd()` — clears dragged deal state
 - `handleDrop(stage)` — updates deal's stage and updatedAt via `updateDeal()`
 - `getLeadName(leadId)` — looks up lead name from leads array
+- `handleCreateDeal()` — validates new deal form and calls `createDeal()`, then closes dialog
 
 **Constants:**
 - `stages` — array of `{ key: DealStage, label: string, color: string }` defining column order and styling
 
 ### Hook Mutations Used
 - `updateDeal(id, { stage, updatedAt })` — on drag-and-drop
+- `createDeal(data)` — on New Deal dialog submit
 
 ---
 
@@ -129,7 +134,7 @@ onDrop={() => handleDrop(stage.key)}           // Update deal stage
 
 ## Known Limitations & TODOs
 
-- No deal creation UI
+- Deal creation is available via the "+ New Deal" dialog (lead selector, title, value, stage)
 - No deal editing beyond stage changes (no value, title, or assignment editing)
 - No deal deletion
 - No deal detail view / modal
@@ -165,3 +170,4 @@ onDrop={() => handleDrop(stage.key)}           // Update deal stage
 |------|--------|----------------|
 | 2026-03-22 | Initial documentation created | — |
 | 2026-03-23 | Data from Supabase, role filtering via RLS, mockUsers replaced | `PipelinePage.tsx` |
+| 2026-03-23 | Deal creation: New Deal dialog with lead selector, title, value, stage | PipelinePage.tsx |

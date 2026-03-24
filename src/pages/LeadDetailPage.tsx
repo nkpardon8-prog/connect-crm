@@ -10,8 +10,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Phone, Mail, MapPin, Building2, Users, Linkedin, Sparkles, Clock, MessageSquare, PhoneCall, MailOpen, Tag, X } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowLeft, Phone, Mail, MapPin, Building2, Users, Linkedin, Sparkles, Clock, MessageSquare, PhoneCall, MailOpen, Tag, X, Pencil, Save } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 const statusConfig: Record<LeadStatus, { label: string; className: string }> = {
   cold: { label: 'Cold', className: 'bg-blue-100 text-blue-700 border-blue-200' },
@@ -38,12 +41,29 @@ export default function LeadDetailPage() {
   const { profiles } = useProfiles();
   const { user } = useAuth();
   const [newNote, setNewNote] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [editData, setEditData] = useState({
+    firstName: '', lastName: '', email: '', phone: '',
+    jobTitle: '', company: '', companySize: '', industry: '',
+    location: '', notes: '', linkedinUrl: '',
+  });
+
+  const lead = leads.find(l => l.id === id);
+
+  useEffect(() => {
+    if (lead) setEditData({
+      firstName: lead.firstName, lastName: lead.lastName, email: lead.email,
+      phone: lead.phone, jobTitle: lead.jobTitle, company: lead.company,
+      companySize: lead.companySize, industry: lead.industry,
+      location: lead.location, notes: lead.notes ?? '', linkedinUrl: lead.linkedinUrl || '',
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead?.id]);
 
   if (leadsLoading) {
     return <div className="p-6 flex items-center justify-center min-h-[50vh]"><div className="text-sm text-muted-foreground">Loading...</div></div>;
   }
 
-  const lead = leads.find(l => l.id === id);
   if (!lead) return <div className="p-6">Lead not found</div>;
 
   const leadActivities = activities;
@@ -58,6 +78,26 @@ export default function LeadDetailPage() {
       type: 'status_change',
       description: `Status changed to ${statusConfig[status].label}`,
       timestamp: new Date().toISOString(),
+    });
+  };
+
+  const handleSave = async () => {
+    try {
+      updateLead(lead.id, editData);
+      setEditing(false);
+      toast.success('Lead updated');
+    } catch {
+      toast.error('Failed to update lead');
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditing(false);
+    setEditData({
+      firstName: lead.firstName, lastName: lead.lastName, email: lead.email,
+      phone: lead.phone, jobTitle: lead.jobTitle, company: lead.company,
+      companySize: lead.companySize, industry: lead.industry,
+      location: lead.location, notes: lead.notes ?? '', linkedinUrl: lead.linkedinUrl || '',
     });
   };
 
@@ -126,49 +166,120 @@ export default function LeadDetailPage() {
           <Card className="border shadow-sm">
             <CardContent className="p-5 space-y-4">
               <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold text-foreground">{lead.firstName} {lead.lastName}</h2>
-                  <p className="text-sm text-muted-foreground">{lead.jobTitle}</p>
+                <div className="flex-1 min-w-0">
+                  {!editing && (
+                    <>
+                      <h2 className="text-xl font-semibold text-foreground">{lead.firstName} {lead.lastName}</h2>
+                      <p className="text-sm text-muted-foreground">{lead.jobTitle}</p>
+                    </>
+                  )}
                 </div>
-                <Select value={lead.status} onValueChange={(v) => handleStatusChange(v as LeadStatus)}>
-                  <SelectTrigger className="w-auto">
-                    <Badge variant="outline" className={statusConfig[lead.status].className}>
-                      {statusConfig[lead.status].label}
-                    </Badge>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(statusConfig).map(([k, v]) => (
-                      <SelectItem key={k} value={k}>{v.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                  {!editing ? (
+                    <>
+                      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setEditing(true)}>
+                        <Pencil className="h-3.5 w-3.5" /> Edit
+                      </Button>
+                      <Select value={lead.status} onValueChange={(v) => handleStatusChange(v as LeadStatus)}>
+                        <SelectTrigger className="w-auto">
+                          <Badge variant="outline" className={statusConfig[lead.status].className}>
+                            {statusConfig[lead.status].label}
+                          </Badge>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(statusConfig).map(([k, v]) => (
+                            <SelectItem key={k} value={k}>{v.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button size="sm" className="gap-1.5" onClick={handleSave}>
+                        <Save className="h-3.5 w-3.5" /> Save
+                      </Button>
+                      <Button variant="outline" size="sm" className="gap-1.5" onClick={handleCancelEdit}>
+                        <X className="h-3.5 w-3.5" /> Cancel
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Building2 className="h-4 w-4 flex-shrink-0" />
-                  <span>{lead.company} · {lead.companySize} employees</span>
+              {editing ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">First Name</Label>
+                      <Input value={editData.firstName} onChange={e => setEditData(d => ({ ...d, firstName: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Last Name</Label>
+                      <Input value={editData.lastName} onChange={e => setEditData(d => ({ ...d, lastName: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Job Title</Label>
+                    <Input value={editData.jobTitle} onChange={e => setEditData(d => ({ ...d, jobTitle: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Company</Label>
+                    <Input value={editData.company} onChange={e => setEditData(d => ({ ...d, company: e.target.value }))} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Company Size</Label>
+                      <Input value={editData.companySize} onChange={e => setEditData(d => ({ ...d, companySize: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Industry</Label>
+                      <Input value={editData.industry} onChange={e => setEditData(d => ({ ...d, industry: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Location</Label>
+                    <Input value={editData.location} onChange={e => setEditData(d => ({ ...d, location: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Phone</Label>
+                    <Input value={editData.phone} onChange={e => setEditData(d => ({ ...d, phone: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Email</Label>
+                    <Input value={editData.email} onChange={e => setEditData(d => ({ ...d, email: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">LinkedIn URL</Label>
+                    <Input value={editData.linkedinUrl} onChange={e => setEditData(d => ({ ...d, linkedinUrl: e.target.value }))} />
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <MapPin className="h-4 w-4 flex-shrink-0" />
-                  <span>{lead.location}</span>
+              ) : (
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Building2 className="h-4 w-4 flex-shrink-0" />
+                    <span>{lead.company} · {lead.companySize} employees</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <MapPin className="h-4 w-4 flex-shrink-0" />
+                    <span>{lead.location}</span>
+                  </div>
+                  <button onClick={handleCall} className="flex items-center gap-2 text-primary hover:underline w-full">
+                    <Phone className="h-4 w-4 flex-shrink-0" />
+                    <span>{lead.phone}</span>
+                  </button>
+                  <button onClick={handleEmailClick} className="flex items-center gap-2 text-primary hover:underline w-full min-w-0">
+                    <Mail className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate flex-1">{lead.email}</span>
+                    {emailStatusBadge(lead.emailStatus)}
+                  </button>
+                  {lead.linkedinUrl && (
+                    <a href={lead.linkedinUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline">
+                      <Linkedin className="h-4 w-4 flex-shrink-0" />
+                      <span>LinkedIn Profile</span>
+                    </a>
+                  )}
                 </div>
-                <button onClick={handleCall} className="flex items-center gap-2 text-primary hover:underline w-full">
-                  <Phone className="h-4 w-4 flex-shrink-0" />
-                  <span>{lead.phone}</span>
-                </button>
-                <button onClick={handleEmailClick} className="flex items-center gap-2 text-primary hover:underline w-full min-w-0">
-                  <Mail className="h-4 w-4 flex-shrink-0" />
-                  <span className="truncate flex-1">{lead.email}</span>
-                  {emailStatusBadge(lead.emailStatus)}
-                </button>
-                {lead.linkedinUrl && (
-                  <a href={lead.linkedinUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline">
-                    <Linkedin className="h-4 w-4 flex-shrink-0" />
-                    <span>LinkedIn Profile</span>
-                  </a>
-                )}
-              </div>
+              )}
 
               <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2 border-t">
                 <span>Assigned to {assignedUser?.name}</span>
