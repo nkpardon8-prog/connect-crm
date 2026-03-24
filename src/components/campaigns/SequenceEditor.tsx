@@ -1,9 +1,12 @@
+import { useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Trash2, Mail, Clock } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Plus, Trash2, Mail, Clock, ChevronDown } from 'lucide-react';
+import { MERGE_FIELDS } from '@/lib/merge-fields';
 
 interface SequenceStep {
   subject: string;
@@ -24,6 +27,26 @@ export default function SequenceEditor({
   introSubject, introBody, onIntroSubjectChange, onIntroBodyChange,
   followUps, onFollowUpsChange,
 }: SequenceEditorProps) {
+  const introBodyRef = useRef<HTMLTextAreaElement>(null);
+  const followUpBodyRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
+
+  const insertFieldAt = (
+    textarea: HTMLTextAreaElement | null,
+    tag: string,
+    currentValue: string,
+    onChange: (v: string) => void,
+  ) => {
+    if (!textarea) { onChange(currentValue + tag); return; }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const newValue = currentValue.slice(0, start) + tag + currentValue.slice(end);
+    onChange(newValue);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + tag.length, start + tag.length);
+    });
+  };
+
   const addStep = () => {
     if (followUps.length >= 4) return; // max 4 follow-ups + 1 intro = 5 total
     onFollowUpsChange([...followUps, { subject: '', body: '', delayDays: 3 }]);
@@ -56,9 +79,33 @@ export default function SequenceEditor({
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Body</Label>
-            <Textarea placeholder="Email body... Use {{firstName}} and {{company}}" value={introBody} onChange={e => onIntroBodyChange(e.target.value)} className="min-h-[100px]" />
+            <div className="flex items-center gap-0.5 px-2 py-1.5 border rounded-t-md bg-muted/30 border-b-0">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onMouseDown={e => e.preventDefault()}>
+                    Add Field <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {MERGE_FIELDS.map(field => (
+                    <DropdownMenuItem
+                      key={field.tag}
+                      onSelect={() => insertFieldAt(introBodyRef.current, field.tag, introBody, onIntroBodyChange)}
+                    >
+                      {field.label} <span className="ml-auto text-xs text-muted-foreground pl-4">{field.tag}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            <Textarea
+              ref={introBodyRef}
+              placeholder="Email body... Use {{firstName}} and {{company}}"
+              value={introBody}
+              onChange={e => onIntroBodyChange(e.target.value)}
+              className="min-h-[100px] rounded-t-none"
+            />
           </div>
-          <p className="text-[10px] text-muted-foreground">Merge fields: {'{{firstName}}'}, {'{{company}}'}, {'{{unsubscribeLink}}'}</p>
         </CardContent>
       </Card>
 
@@ -92,7 +139,32 @@ export default function SequenceEditor({
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Body</Label>
-              <Textarea placeholder="Follow-up body..." value={step.body} onChange={e => updateStep(i, 'body', e.target.value)} className="min-h-[80px]" />
+              <div className="flex items-center gap-0.5 px-2 py-1.5 border rounded-t-md bg-muted/30 border-b-0">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onMouseDown={e => e.preventDefault()}>
+                      Add Field <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    {MERGE_FIELDS.map(field => (
+                      <DropdownMenuItem
+                        key={field.tag}
+                        onSelect={() => insertFieldAt(followUpBodyRefs.current[i], field.tag, step.body, v => updateStep(i, 'body', v))}
+                      >
+                        {field.label} <span className="ml-auto text-xs text-muted-foreground pl-4">{field.tag}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              <Textarea
+                ref={el => { followUpBodyRefs.current[i] = el; }}
+                placeholder="Follow-up body..."
+                value={step.body}
+                onChange={e => updateStep(i, 'body', e.target.value)}
+                className="min-h-[80px] rounded-t-none"
+              />
             </div>
           </CardContent>
         </Card>

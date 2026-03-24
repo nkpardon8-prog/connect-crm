@@ -1,8 +1,12 @@
+import { useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FlaskConical } from 'lucide-react';
+import { FlaskConical, ChevronDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { MERGE_FIELDS } from '@/lib/merge-fields';
 
 interface ABVariantEditorProps {
   subject: string;
@@ -12,6 +16,21 @@ interface ABVariantEditorProps {
 }
 
 export default function ABVariantEditor({ subject, body, onSubjectChange, onBodyChange }: ABVariantEditorProps) {
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
+
+  const insertField = (tag: string) => {
+    const textarea = bodyRef.current
+    if (!textarea) { onBodyChange(body + tag); return }
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const newValue = body.slice(0, start) + tag + body.slice(end)
+    onBodyChange(newValue)
+    requestAnimationFrame(() => {
+      textarea.focus()
+      textarea.setSelectionRange(start + tag.length, start + tag.length)
+    })
+  }
+
   return (
     <Card className="border border-dashed border-primary/30 bg-primary/5">
       <CardHeader className="pb-2">
@@ -27,9 +46,24 @@ export default function ABVariantEditor({ subject, body, onSubjectChange, onBody
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Body</Label>
-          <Textarea placeholder="Variant B email body... Use {{firstName}} and {{company}}" value={body} onChange={e => onBodyChange(e.target.value)} className="min-h-[150px]" />
+          <div className="flex items-center gap-0.5 px-2 py-1.5 border rounded-t-md bg-muted/30 border-b-0">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onMouseDown={e => e.preventDefault()}>
+                  Add Field <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {MERGE_FIELDS.map(field => (
+                  <DropdownMenuItem key={field.tag} onSelect={() => insertField(field.tag)}>
+                    {field.label} <span className="ml-auto text-xs text-muted-foreground pl-4">{field.tag}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          <Textarea ref={bodyRef} placeholder="Variant B email body... Use {{firstName}} and {{company}}" value={body} onChange={e => onBodyChange(e.target.value)} className="min-h-[150px] rounded-t-none" />
         </div>
-        <p className="text-[10px] text-muted-foreground">Merge fields: {'{{firstName}}'}, {'{{company}}'}, {'{{unsubscribeLink}}'}</p>
       </CardContent>
     </Card>
   );

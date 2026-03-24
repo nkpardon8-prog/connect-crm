@@ -1,6 +1,23 @@
 import { corsHeaders } from '../_shared/cors.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+function applyMergeFields(text: string, data: {
+  first_name?: string; last_name?: string; company?: string;
+  job_title?: string; industry?: string; location?: string;
+  phone?: string; email?: string;
+}): string {
+  return text
+    .replace(/\{\{firstName\}\}/g, data.first_name || '')
+    .replace(/\{\{lastName\}\}/g, data.last_name || '')
+    .replace(/\{\{fullName\}\}/g, [data.first_name, data.last_name].filter(Boolean).join(' '))
+    .replace(/\{\{jobTitle\}\}/g, data.job_title || '')
+    .replace(/\{\{company\}\}/g, data.company || '')
+    .replace(/\{\{industry\}\}/g, data.industry || '')
+    .replace(/\{\{location\}\}/g, data.location || '')
+    .replace(/\{\{phone\}\}/g, data.phone || '')
+    .replace(/\{\{email\}\}/g, data.email || '')
+}
+
 function calculateOptimalSendTime(timezone: string | null): Date | null {
   if (!timezone) return null
   try {
@@ -93,12 +110,22 @@ Deno.serve(async (req) => {
       // Bulk-fetch lead data for merge fields
       const leadIds = enrollments.map(e => e.lead_id).filter(Boolean)
       const { data: leadsData } = await supabaseAdmin.from('leads')
-        .select('id, first_name, company, timezone, email_status')
+        .select('id, first_name, last_name, email, phone, job_title, company, industry, location, company_size, timezone, email_status')
         .in('id', leadIds)
 
-      const leadMap = new Map<string, { first_name: string; company: string; timezone: string | null; email_status: string | null }>()
+      const leadMap = new Map<string, {
+        first_name: string; last_name: string; email: string; phone: string;
+        job_title: string; company: string; industry: string; location: string;
+        company_size: string; timezone: string | null; email_status: string | null;
+      }>()
       for (const l of leadsData || []) {
-        leadMap.set(l.id, { first_name: l.first_name, company: l.company, timezone: l.timezone ?? null, email_status: l.email_status ?? null })
+        leadMap.set(l.id, {
+          first_name: l.first_name, last_name: l.last_name || '', email: l.email || '',
+          phone: l.phone || '', job_title: l.job_title || '', company: l.company,
+          industry: l.industry || '', location: l.location || '',
+          company_size: l.company_size || '', timezone: l.timezone ?? null,
+          email_status: l.email_status ?? null,
+        })
       }
 
       // Smart send: defer enrollments where it's not 9 AM local yet
@@ -159,13 +186,8 @@ Deno.serve(async (req) => {
         ;(e as Record<string, unknown>)._variant = useVariantB ? 'B' : 'A'
 
         const lead = e.lead_id ? leadMap.get(e.lead_id) : null
-        let emailBody = templateBody
-          .replace(/\{\{firstName\}\}/g, lead?.first_name || '')
-          .replace(/\{\{company\}\}/g, lead?.company || '')
-
-        const emailSubject = templateSubject
-          .replace(/\{\{firstName\}\}/g, lead?.first_name || '')
-          .replace(/\{\{company\}\}/g, lead?.company || '')
+        let emailBody = applyMergeFields(templateBody, lead || {})
+        const emailSubject = applyMergeFields(templateSubject, lead || {})
 
         // Unsubscribe link
         if (SITE_URL && emailBody.includes('{{unsubscribeLink}}')) {
@@ -304,23 +326,23 @@ Deno.serve(async (req) => {
       if (!profile?.sending_email) continue
 
       // Fetch lead data for merge fields
-      let firstName = ''
-      let company = ''
+      let lead: { first_name: string; last_name: string; email: string; phone: string; job_title: string; company: string; industry: string; location: string; email_status: string | null } | null = null
       if (enrollment.lead_id) {
-        const { data: lead } = await supabaseAdmin.from('leads')
-          .select('first_name, company, email_status').eq('id', enrollment.lead_id).single()
-        if (lead?.email_status === 'invalid') {
+        const { data: leadResult } = await supabaseAdmin.from('leads')
+          .select('first_name, last_name, email, phone, job_title, company, industry, location, email_status').eq('id', enrollment.lead_id).single()
+        if (leadResult?.email_status === 'invalid') {
           await supabaseAdmin.from('campaign_enrollments')
             .update({ status: 'bounced' }).eq('id', enrollment.id)
           console.log(`Drip skip: enrollment ${enrollment.id} lead ${enrollment.lead_id} has invalid email`)
           continue
         }
-        if (lead) { firstName = lead.first_name; company = lead.company }
+        lead = leadResult ?? null
       }
 
       // Build email
-      const emailSubject = step.subject.replace(/\{\{firstName\}\}/g, firstName).replace(/\{\{company\}\}/g, company)
-      let emailBody = step.body.replace(/\{\{firstName\}\}/g, firstName).replace(/\{\{company\}\}/g, company)
+      const leadData = lead || { first_name: '', last_name: '', company: '', job_title: '', industry: '', location: '', phone: '', email: '' }
+      const emailSubject = applyMergeFields(step.subject, leadData)
+      let emailBody = applyMergeFields(step.body, leadData)
 
       if (SITE_URL && emailBody.includes('{{unsubscribeLink}}')) {
         const token = crypto.randomUUID()

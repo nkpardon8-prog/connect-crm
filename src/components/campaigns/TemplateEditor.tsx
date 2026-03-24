@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useTemplates } from '@/hooks/use-templates';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Sparkles, Wand2, Save, BookOpen, Bold, Italic, Link2, List } from 'lucide-react';
+import { Sparkles, Wand2, Save, BookOpen, Bold, Italic, Link2, List, ChevronDown } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { MERGE_FIELDS } from '@/lib/merge-fields';
 import TemplateLibrary from './TemplateLibrary';
 import type { CampaignTemplate } from '@/types/crm';
 
@@ -21,12 +23,26 @@ interface TemplateEditorProps {
 
 export default function TemplateEditor({ subject, body, onSubjectChange, onBodyChange }: TemplateEditorProps) {
   const { createTemplate } = useTemplates();
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [templateName, setTemplateName] = useState('');
+
+  const insertField = (tag: string) => {
+    const textarea = bodyRef.current
+    if (!textarea) { onBodyChange(body + tag); return }
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const newValue = body.slice(0, start) + tag + body.slice(end)
+    onBodyChange(newValue)
+    requestAnimationFrame(() => {
+      textarea.focus()
+      textarea.setSelectionRange(start + tag.length, start + tag.length)
+    })
+  }
 
   const handleGenerate = async () => {
     if (!aiPrompt.trim()) return;
@@ -138,9 +154,23 @@ export default function TemplateEditor({ subject, body, onSubjectChange, onBodyC
           <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Italic" onMouseDown={e => e.preventDefault()}><Italic className="h-3.5 w-3.5" /></Button>
           <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Link" onMouseDown={e => e.preventDefault()}><Link2 className="h-3.5 w-3.5" /></Button>
           <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="List" onMouseDown={e => e.preventDefault()}><List className="h-3.5 w-3.5" /></Button>
+          <div className="w-px h-4 bg-border mx-1" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onMouseDown={e => e.preventDefault()}>
+                Add Field <ChevronDown className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {MERGE_FIELDS.map(field => (
+                <DropdownMenuItem key={field.tag} onSelect={() => insertField(field.tag)}>
+                  {field.label} <span className="ml-auto text-xs text-muted-foreground pl-4">{field.tag}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-        <Textarea placeholder="Write your email body... Use {{firstName}} and {{company}} for personalization." value={body} onChange={e => onBodyChange(e.target.value)} className="min-h-[200px] rounded-t-none" />
-        <p className="text-xs text-muted-foreground">Merge fields: {'{{firstName}}'}, {'{{company}}'}, {'{{unsubscribeLink}}'}</p>
+        <Textarea ref={bodyRef} placeholder="Write your email body... Use {{firstName}} and {{company}} for personalization." value={body} onChange={e => onBodyChange(e.target.value)} className="min-h-[200px] rounded-t-none" />
       </div>
 
       <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>

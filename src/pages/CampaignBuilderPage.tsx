@@ -21,6 +21,7 @@ import TemplateEditor from '@/components/campaigns/TemplateEditor';
 import SequenceEditor from '@/components/campaigns/SequenceEditor';
 import ABVariantEditor from '@/components/campaigns/ABVariantEditor';
 import { searchApollo } from '@/lib/api/apollo';
+import { applyMergeFields } from '@/lib/merge-fields';
 
 export default function CampaignBuilderPage() {
   const navigate = useNavigate();
@@ -66,10 +67,10 @@ export default function CampaignBuilderPage() {
 
   // Preview with merge fields replaced
   const previewSubject = sampleLead
-    ? subject.replace(/\{\{firstName\}\}/g, sampleLead.firstName).replace(/\{\{company\}\}/g, sampleLead.company)
+    ? applyMergeFields(subject, sampleLead)
     : subject;
   const previewBody = sampleLead
-    ? body.replace(/\{\{firstName\}\}/g, sampleLead.firstName).replace(/\{\{company\}\}/g, sampleLead.company).replace(/\{\{unsubscribeLink\}\}/g, '#unsubscribe')
+    ? applyMergeFields(body, sampleLead).replace(/\{\{unsubscribeLink\}\}/g, '#unsubscribe')
     : body;
 
   const canProceedStep1 = campaignName.trim() && selectedLeadIds.size > 0;
@@ -147,8 +148,8 @@ export default function CampaignBuilderPage() {
           from: user.sendingEmail!,
           fromName: user.name,
           to: lead.email,
-          subject: subject.trim().replace('{{firstName}}', lead.firstName).replace('{{company}}', lead.company),
-          body: body.trim().replace(/\{\{firstName\}\}/g, lead.firstName).replace(/\{\{company\}\}/g, lead.company),
+          subject: applyMergeFields(subject.trim(), lead),
+          body: applyMergeFields(body.trim(), lead),
           threadId: `t-camp-${Date.now()}-${leadId}`,
         };
       }).filter(Boolean) as Array<{ leadId: string; from: string; fromName: string; to: string; subject: string; body: string; threadId: string }>;
