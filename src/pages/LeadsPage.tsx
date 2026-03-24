@@ -32,11 +32,18 @@ export default function LeadsPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [industryFilter, setIndustryFilter] = useState<string>('all');
+
+  const industries = useMemo(() =>
+    [...new Set(leads.map(l => l.industry).filter(Boolean))].sort(),
+    [leads]
+  );
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const visibleLeads = useMemo(() => {
     let filtered = leads;
     if (statusFilter !== 'all') filtered = filtered.filter(l => l.status === statusFilter);
+    if (industryFilter !== 'all') filtered = filtered.filter(l => l.industry === industryFilter);
     if (search) {
       const q = search.toLowerCase();
       filtered = filtered.filter(l =>
@@ -46,7 +53,7 @@ export default function LeadsPage() {
       );
     }
     return filtered;
-  }, [leads, statusFilter, search]);
+  }, [leads, statusFilter, industryFilter, search]);
 
   const toggleSelect = (id: string) => {
     setSelected(prev => {
@@ -147,6 +154,17 @@ export default function LeadsPage() {
             <SelectItem value="dead">Dead</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={industryFilter} onValueChange={setIndustryFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Industry" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Industries</SelectItem>
+            {industries.map(ind => (
+              <SelectItem key={ind} value={ind}>{ind}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {selected.size > 0 && (
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">{selected.size} selected</span>
@@ -165,6 +183,7 @@ export default function LeadsPage() {
                 <TableHead className="w-10"><Checkbox checked={selected.size === visibleLeads.length && visibleLeads.length > 0} onCheckedChange={toggleAll} /></TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Company</TableHead>
+                <TableHead>Industry</TableHead>
                 <TableHead>Job Title</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Phone</TableHead>
@@ -188,6 +207,7 @@ export default function LeadsPage() {
                       <p className="text-xs text-muted-foreground">{lead.companySize} emp</p>
                     </div>
                   </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{lead.industry || '—'}</TableCell>
                   <TableCell className="text-sm">{lead.jobTitle}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className={statusConfig[lead.status].className}>
