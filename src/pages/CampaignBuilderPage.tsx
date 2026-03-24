@@ -1,11 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLeads } from '@/hooks/use-leads';
 import { useCampaigns } from '@/hooks/use-campaigns';
-import { sendBulkEmails } from '@/lib/api/send-email';
-import { useActivities } from '@/hooks/use-activities';
 import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,12 +22,26 @@ import ABVariantEditor from '@/components/campaigns/ABVariantEditor';
 import { searchApollo } from '@/lib/api/apollo';
 import { applyMergeFields } from '@/lib/merge-fields';
 
+// WARMUP TIERS — duplicated in supabase/functions/process-campaigns/index.ts
+// Keep both in sync when modifying.
+const WARMUP_TIERS = [
+  { value: 5, label: '5/day', unlocksAfterDays: 0 },
+  { value: 10, label: '10/day', unlocksAfterDays: 0 },
+  { value: 15, label: '15/day', unlocksAfterDays: 0 },
+  { value: 20, label: '20/day', unlocksAfterDays: 0 },
+  { value: 25, label: '25/day', unlocksAfterDays: 8 },
+  { value: 50, label: '50/day', unlocksAfterDays: 15 },
+  { value: 75, label: '75/day', unlocksAfterDays: 22 },
+  { value: 100, label: '100/day', unlocksAfterDays: 31 },
+  { value: 150, label: '150/day', unlocksAfterDays: 61 },
+  { value: 200, label: '200/day', unlocksAfterDays: 91 },
+]
+
 export default function CampaignBuilderPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { leads, addLeads } = useLeads();
-  const { addCampaignAsync, updateCampaign, createEnrollments, createSequenceWithSteps } = useCampaigns();
-  const { addActivity } = useActivities();
+  const { addCampaignAsync, createEnrollments, createSequenceWithSteps } = useCampaigns();
   const queryClient = useQueryClient();
 
   const [step, setStep] = useState(1);
@@ -46,12 +59,25 @@ export default function CampaignBuilderPage() {
   const [variantBSubject, setVariantBSubject] = useState('');
   const [variantBBody, setVariantBBody] = useState('');
   const [smartSend, setSmartSend] = useState(false);
+  const [dailySendLimit, setDailySendLimit] = useState(20);
+  const [sendSpacing, setSendSpacing] = useState(false);
+  const [warmupDays, setWarmupDays] = useState(0);
 
   // Apollo auto-gen state
   const [showApolloGen, setShowApolloGen] = useState(false);
   const [apolloPrompt, setApolloPrompt] = useState('');
   const [apolloCount, setApolloCount] = useState(25);
   const [apolloLoading, setApolloLoading] = useState(false);
+
+  useEffect(() => {
+    supabase.from('warmup_state').select('*').eq('id', 'default').maybeSingle()
+      .then(({ data }) => {
+        if (data?.first_email_at) {
+          const days = Math.floor((Date.now() - new Date(data.first_email_at).getTime()) / (24*60*60*1000))
+          setWarmupDays(days)
+        }
+      })
+  }, [])
 
   // Only show leads with verified emails
   const emailSafeLeads = useMemo(() =>
@@ -107,6 +133,8 @@ export default function CampaignBuilderPage() {
           variantBBody: abTestEnabled ? variantBBody.trim() : undefined,
           sequenceId: sequenceId || undefined,
           smartSend,
+          dailySendLimit,
+          sendSpacing,
         });
         const recipients = Array.from(selectedLeadIds).map(leadId => {
           const lead = leads.find(l => l.id === leadId);
@@ -123,39 +151,6 @@ export default function CampaignBuilderPage() {
 
     setSending(true);
     try {
-      // Create campaign as draft first
-      const campaign = await addCampaignAsync({
-        name: campaignName.trim(),
-        subject: subject.trim(),
-        body: body.trim(),
-        recipientIds: Array.from(selectedLeadIds),
-        sentAt: new Date().toISOString(),
-        sentBy: user.id,
-        status: 'draft',
-        abTestEnabled,
-        variantBSubject: abTestEnabled ? variantBSubject.trim() : undefined,
-        variantBBody: abTestEnabled ? variantBBody.trim() : undefined,
-        smartSend,
-      });
-
-      // Send emails
-      const recipientIds = Array.from(selectedLeadIds);
-      const campaignEmails = recipientIds.map(leadId => {
-        const lead = leads.find(l => l.id === leadId);
-        if (!lead) return null;
-        return {
-          leadId,
-          from: user.sendingEmail!,
-          fromName: user.name,
-          to: lead.email,
-          subject: applyMergeFields(subject.trim(), lead),
-          body: applyMergeFields(body.trim(), lead),
-          threadId: `t-camp-${Date.now()}-${leadId}`,
-        };
-      }).filter(Boolean) as Array<{ leadId: string; from: string; fromName: string; to: string; subject: string; body: string; threadId: string }>;
-
-      const result = await sendBulkEmails(campaignEmails, campaign.id);
-
       // Create sequence if multi-step
       let sequenceId: string | undefined;
       if (useSequence && followUps.length > 0) {
@@ -164,40 +159,42 @@ export default function CampaignBuilderPage() {
           ...followUps.map(f => ({ subject: f.subject.trim(), body: f.body.trim(), delayDays: f.delayDays })),
         ];
         sequenceId = await createSequenceWithSteps(allSteps, user.id);
-        await updateCampaign(campaign.id, { sequenceId });
       }
 
-      // Update campaign status to completed on success
-      await updateCampaign(campaign.id, { status: 'completed' });
+      // Create campaign as active — scheduler will handle sending
+      const campaign = await addCampaignAsync({
+        name: campaignName.trim(),
+        subject: subject.trim(),
+        body: body.trim(),
+        recipientIds: Array.from(selectedLeadIds),
+        sentAt: new Date().toISOString(),
+        sentBy: user.id,
+        status: 'active',
+        abTestEnabled,
+        variantBSubject: abTestEnabled ? variantBSubject.trim() : undefined,
+        variantBBody: abTestEnabled ? variantBBody.trim() : undefined,
+        sequenceId: sequenceId || undefined,
+        smartSend,
+        dailySendLimit,
+        sendSpacing,
+      });
 
-      // Create enrollment rows for tracking
+      // Create pending enrollments — scheduler picks these up
       const enrollmentRecipients = Array.from(selectedLeadIds).map(leadId => {
         const lead = leads.find(l => l.id === leadId);
         if (useSequence && followUps.length > 0) {
-          // Step 0 already sent — enroll at step 1 for the first follow-up
           const nextSendAt = new Date(Date.now() + followUps[0].delayDays * 24 * 60 * 60 * 1000).toISOString();
-          return { leadId, email: lead?.email || '', currentStep: 1, nextSendAt };
+          return { leadId, email: lead?.email || '', currentStep: 0, nextSendAt };
         }
         return { leadId, email: lead?.email || '' };
       }).filter(r => r.email);
       await createEnrollments(campaign.id, enrollmentRecipients);
 
-      if (result?.failedCount > 0) {
-        toast.warning(`${result.failedCount} of ${campaignEmails.length} emails failed`);
-      } else {
-        toast.success(`Campaign sent to ${campaignEmails.length} recipients`);
-      }
-
-      // Log activities
-      for (const leadId of recipientIds) {
-        addActivity({ leadId, userId: user.id, type: 'email_sent', description: `Campaign: "${campaignName.trim()}"`, timestamp: new Date().toISOString() });
-      }
-
-      queryClient.invalidateQueries({ queryKey: ['emails'] });
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
-      navigate('/outreach');
+      toast.success('Campaign is now active. Emails will send according to your daily limit.');
+      navigate('/outreach?tab=campaigns');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to send campaign');
+      toast.error(err instanceof Error ? err.message : 'Failed to create campaign');
     } finally {
       setSending(false);
     }
@@ -401,6 +398,36 @@ export default function CampaignBuilderPage() {
                 <p className="text-muted-foreground text-xs">From</p>
                 <p className="font-medium">{user?.sendingEmail || 'Not set'}</p>
               </div>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Daily limit:</span>
+                <Select value={String(dailySendLimit)} onValueChange={v => setDailySendLimit(Number(v))}>
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {WARMUP_TIERS.map(tier => (
+                      <SelectItem
+                        key={tier.value}
+                        value={String(tier.value)}
+                        disabled={warmupDays < tier.unlocksAfterDays}
+                      >
+                        {tier.label}{warmupDays < tier.unlocksAfterDays ? ` (${tier.unlocksAfterDays - warmupDays}d)` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                variant={sendSpacing ? 'default' : 'outline'}
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setSendSpacing(!sendSpacing)}
+              >
+                <Clock className="h-3.5 w-3.5" /> {sendSpacing ? 'Spacing On' : 'Space Emails'}
+              </Button>
+              {sendSpacing && <span className="text-xs text-muted-foreground">Emails will be spread evenly throughout the day</span>}
             </div>
             <div className="flex items-center gap-3 mb-4">
               <Button

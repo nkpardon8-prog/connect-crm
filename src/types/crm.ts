@@ -119,6 +119,8 @@ export interface Campaign {
   abTestEnabled: boolean;
   sequenceId?: string;
   smartSend?: boolean;
+  dailySendLimit?: number;
+  sendSpacing?: boolean;
 }
 
 export interface CampaignEnrollment {

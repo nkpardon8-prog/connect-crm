@@ -33,6 +33,18 @@ function calculateOptimalSendTime(timezone: string | null): Date | null {
   } catch { return null }
 }
 
+// WARMUP TIERS — duplicated in src/pages/CampaignBuilderPage.tsx
+// Keep both in sync when modifying.
+function getMaxDailyAllowed(daysSinceFirstEmail: number): number {
+  if (daysSinceFirstEmail >= 91) return 200
+  if (daysSinceFirstEmail >= 61) return 150
+  if (daysSinceFirstEmail >= 31) return 100
+  if (daysSinceFirstEmail >= 22) return 75
+  if (daysSinceFirstEmail >= 15) return 50
+  if (daysSinceFirstEmail >= 8) return 25
+  return 20
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -47,6 +59,39 @@ Deno.serve(async (req) => {
     if (!RESEND_API_KEY) {
       return new Response(JSON.stringify({ error: 'RESEND_API_KEY not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    const today = new Date().toISOString().split('T')[0]
+
+    // Get warmup state
+    const { data: warmup } = await supabaseAdmin.from('warmup_state')
+      .select('*').eq('id', 'default').maybeSingle()
+    const firstEmailAt = warmup?.first_email_at ? new Date(warmup.first_email_at) : null
+    const daysSinceFirstEmail = firstEmailAt
+      ? Math.floor((Date.now() - firstEmailAt.getTime()) / (24 * 60 * 60 * 1000))
+      : 0
+    const maxDailyAllowed = getMaxDailyAllowed(daysSinceFirstEmail)
+
+    // Auto-initialize warmup on first campaign send
+    if (!warmup || !warmup.first_email_at) {
+      await supabaseAdmin.from('warmup_state').upsert({
+        id: 'default',
+        first_email_at: new Date().toISOString(),
+      })
+      console.log('Warmup initialized: first campaign email')
+    }
+
+    // Get today's sent count
+    const { data: logRow } = await supabaseAdmin.from('email_send_log')
+      .select('emails_sent').eq('send_date', today).maybeSingle()
+    let todaySent = logRow?.emails_sent || 0
+    let remainingBudget = Math.max(0, maxDailyAllowed - todaySent)
+
+    if (remainingBudget <= 0) {
+      console.log(`Daily limit reached (${todaySent}/${maxDailyAllowed}), skipping all campaigns`)
+      return new Response(JSON.stringify({ processed: 0, dailyLimitReached: true }), {
+        headers: { 'Content-Type': 'application/json' },
+      })
     }
 
     let scheduledProcessed = 0
@@ -78,14 +123,18 @@ Deno.serve(async (req) => {
     })
 
     for (const campaign of uniqueCampaigns) {
+      const campaignDailyLimit = campaign.daily_send_limit || 100
+      const batchSize = Math.min(remainingBudget, campaignDailyLimit, 100)
+      if (batchSize <= 0) continue
+
       // Get pending enrollments
       const { data: enrollmentsData } = await supabaseAdmin
         .from('campaign_enrollments')
         .select('*')
         .eq('campaign_id', campaign.id)
         .eq('status', 'pending')
-        .is('next_send_at', null)
-        .limit(100) // Process in chunks to avoid timeout
+        .or(`next_send_at.is.null,next_send_at.lte.${new Date().toISOString()}`)
+        .limit(batchSize) // Process in chunks to avoid timeout
       let enrollments = enrollmentsData
 
       if (!enrollments?.length) {
@@ -172,6 +221,29 @@ Deno.serve(async (req) => {
 
       if (enrollments.length === 0) continue
 
+      // Send spacing: stagger emails across 8 hours
+      if (campaign.send_spacing && enrollments.length > 1) {
+        const SEND_WINDOW_MS = 8 * 60 * 60 * 1000 // 8 hours
+        const intervalMs = Math.floor(SEND_WINDOW_MS / enrollments.length)
+        const randomJitter = () => Math.floor(Math.random() * 120000) - 60000 // ±1 min
+
+        // Defer all except the first enrollment
+        for (let j = 1; j < enrollments.length; j++) {
+          const sendAt = new Date(Date.now() + (j * intervalMs) + randomJitter())
+          await supabaseAdmin.from('campaign_enrollments')
+            .update({ next_send_at: sendAt.toISOString() })
+            .eq('id', enrollments[j].id)
+        }
+        console.log(`Spacing: deferred ${enrollments.length - 1} emails across ${SEND_WINDOW_MS / 3600000}h`)
+
+        // Claim full batch from budget (even though most are deferred)
+        remainingBudget -= enrollments.length
+        todaySent += enrollments.length
+
+        // Only keep first enrollment for immediate send
+        enrollments = [enrollments[0]]
+      }
+
       // Build email batch
       const resendEmails = enrollments.map(e => {
         // Determine A/B variant
@@ -254,6 +326,17 @@ Deno.serve(async (req) => {
               .update({ status: 'sent', sent_at: new Date().toISOString(), ab_variant: 'B' })
               .in('id', variantBIds)
           }
+
+          // Update daily send count
+          if (!campaign.send_spacing) {
+            // Only increment here if not spacing (spacing claims budget upfront)
+            todaySent += chunk.length
+            remainingBudget -= chunk.length
+          }
+          await supabaseAdmin.from('email_send_log').upsert({
+            send_date: today,
+            emails_sent: todaySent,
+          })
         } else {
           const error = await res.text()
           const status = res.status
@@ -300,6 +383,12 @@ Deno.serve(async (req) => {
       .limit(50)
 
     for (const enrollment of dueEnrollments || []) {
+      // Check daily budget before drip send
+      if (remainingBudget <= 0) {
+        console.log('Daily limit reached during drip processing, stopping')
+        break
+      }
+
       // Fetch the campaign
       const { data: campaign } = await supabaseAdmin
         .from('campaigns')
@@ -420,6 +509,13 @@ Deno.serve(async (req) => {
             .update({ status: 'sent', sent_at: new Date().toISOString(), next_send_at: null })
             .eq('id', enrollment.id)
         }
+
+        todaySent += 1
+        remainingBudget -= 1
+        await supabaseAdmin.from('email_send_log').upsert({
+          send_date: today,
+          emails_sent: todaySent,
+        })
 
         dripProcessed++
       } else {

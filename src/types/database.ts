@@ -336,6 +336,8 @@ export type Database = {
           sent_by: string
           sequence_id: string | null
           smart_send: boolean
+          daily_send_limit: number | null
+          send_spacing: boolean | null
           status: string
           subject: string
           updated_at: string
@@ -356,6 +358,8 @@ export type Database = {
           sent_by: string
           sequence_id?: string | null
           smart_send?: boolean
+          daily_send_limit?: number | null
+          send_spacing?: boolean | null
           status?: string
           subject: string
           updated_at?: string
@@ -376,6 +380,8 @@ export type Database = {
           sent_by?: string
           sequence_id?: string | null
           smart_send?: boolean
+          daily_send_limit?: number | null
+          send_spacing?: boolean | null
           status?: string
           subject?: string
           updated_at?: string
@@ -864,6 +870,18 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      email_send_log: {
+        Row: { send_date: string; emails_sent: number; updated_at: string }
+        Insert: { send_date?: string; emails_sent?: number; updated_at?: string }
+        Update: { send_date?: string; emails_sent?: number; updated_at?: string }
+        Relationships: []
+      }
+      warmup_state: {
+        Row: { id: string; first_email_at: string | null; reset_at: string | null; reset_by: string | null; created_at: string }
+        Insert: { id?: string; first_email_at?: string | null; reset_at?: string | null; reset_by?: string | null; created_at?: string }
+        Update: { id?: string; first_email_at?: string | null; reset_at?: string | null; reset_by?: string | null }
+        Relationships: []
       }
     }
     Views: {

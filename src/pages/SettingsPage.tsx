@@ -1,18 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProfiles } from '@/hooks/use-profiles';
 import { createInvite, deleteMember } from '@/lib/api/team';
 import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { User, Shield, Plug, Trash2, Mail, Copy } from 'lucide-react';
+import { User, Shield, Plug, Trash2, Mail, Copy, RotateCcw } from 'lucide-react';
 
 export default function SettingsPage() {
   const { user, isAdmin, refreshUser } = useAuth();
@@ -34,6 +35,19 @@ export default function SettingsPage() {
   // Delete state
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Warmup state
+  const [warmupFirstEmail, setWarmupFirstEmail] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.from('warmup_state').select('*').eq('id', 'default').maybeSingle()
+      .then(({ data }) => {
+        if (data?.first_email_at) setWarmupFirstEmail(data.first_email_at)
+      })
+  }, [])
+
+  const warmupDays = warmupFirstEmail ? Math.floor((Date.now() - new Date(warmupFirstEmail).getTime()) / (24*60*60*1000)) : 0
+  const maxTier = warmupDays >= 91 ? 200 : warmupDays >= 61 ? 150 : warmupDays >= 31 ? 100 : warmupDays >= 22 ? 75 : warmupDays >= 15 ? 50 : warmupDays >= 8 ? 25 : 20
 
   const handleCreateInvite = async () => {
     setInviteLoading(true);
@@ -133,6 +147,7 @@ export default function SettingsPage() {
 
       {/* Team (admin) */}
       {isAdmin && (
+        <>
         <Card className="border shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2"><Shield className="h-4 w-4" /> Team Management</CardTitle>
@@ -159,6 +174,52 @@ export default function SettingsPage() {
             <Button variant="outline" size="sm" className="mt-2" onClick={() => setShowInviteDialog(true)}>+ Add Team Member</Button>
           </CardContent>
         </Card>
+
+        <Card className="border shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Shield className="h-4 w-4" /> Domain Warmup
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="text-sm text-muted-foreground space-y-1">
+              <p>Warmup age: <span className="font-medium text-foreground">{warmupFirstEmail ? `${warmupDays} days` : 'Not started'}</span></p>
+              <p>Max daily send: <span className="font-medium text-foreground">{maxTier}/day</span></p>
+            </div>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="text-destructive gap-1.5">
+                  <RotateCcw className="h-3.5 w-3.5" /> Reset Domain Warmup
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Reset Domain Warmup?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will restart the warmup schedule from day 0, limiting your daily sends to 20/day. Use this if your domain reputation needs rebuilding.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={async () => {
+                    const now = new Date().toISOString()
+                    await supabase.from('warmup_state').upsert({
+                      id: 'default',
+                      first_email_at: now,
+                      reset_at: now,
+                      reset_by: user!.id,
+                    })
+                    setWarmupFirstEmail(now)
+                    toast.success('Domain warmup has been reset')
+                  }}>
+                    Reset Warmup
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </CardContent>
+        </Card>
+        </>
       )}
 
       {/* Integrations */}
