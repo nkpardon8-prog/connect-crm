@@ -62,6 +62,41 @@ export async function deleteCampaign(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function createEnrollments(
+  campaignId: string,
+  recipients: { leadId: string; email: string }[]
+): Promise<void> {
+  const rows = recipients.map(r => ({
+    campaign_id: campaignId,
+    lead_id: r.leadId,
+    email: r.email,
+    status: 'pending',
+  }));
+  const { error } = await supabase.from('campaign_enrollments').insert(rows);
+  if (error) throw error;
+}
+
+export async function updateEnrollmentStatus(
+  campaignId: string,
+  leadId: string,
+  status: string
+): Promise<void> {
+  const { error } = await supabase.from('campaign_enrollments')
+    .update({ status })
+    .eq('campaign_id', campaignId)
+    .eq('lead_id', leadId);
+  if (error) throw error;
+}
+
+export async function getEnrollments(campaignId: string) {
+  const { data, error } = await supabase.from('campaign_enrollments')
+    .select('*')
+    .eq('campaign_id', campaignId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return transformRows<{ id: string; campaignId: string; leadId: string | null; email: string; status: string; sentAt: string | null }>(data || []);
+}
+
 export async function getCampaignAnalytics(campaignId: string) {
   const { data: emails, error } = await supabase
     .from('emails')

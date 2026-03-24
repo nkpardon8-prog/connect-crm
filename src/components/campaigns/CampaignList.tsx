@@ -5,17 +5,18 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Eye, MousePointerClick, AlertTriangle, Copy, Trash2, BarChart3 } from 'lucide-react';
+import { Eye, MousePointerClick, AlertTriangle, Copy, Trash2, BarChart3, PauseCircle, PlayCircle } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   draft: 'bg-slate-100 text-slate-700',
   active: 'bg-blue-100 text-blue-700',
   paused: 'bg-amber-100 text-amber-700',
   completed: 'bg-emerald-100 text-emerald-700',
+  scheduled: 'bg-violet-100 text-violet-700',
 };
 
 export default function CampaignList() {
-  const { campaigns, deleteCampaign, cloneCampaign } = useCampaigns();
+  const { campaigns, deleteCampaign, cloneCampaign, updateCampaign } = useCampaigns();
   const { emails } = useEmails();
   const navigate = useNavigate();
 
@@ -94,6 +95,31 @@ export default function CampaignList() {
                   className="flex items-center gap-1"
                   onClick={e => e.stopPropagation()}
                 >
+                  {campaign.status === 'active' && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      title="Pause"
+                      onClick={(e) => { e.stopPropagation(); updateCampaign(campaign.id, { status: 'paused' }); toast.success('Paused'); }}
+                    >
+                      <PauseCircle className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  {campaign.status === 'paused' && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      title="Resume"
+                      onClick={(e) => { e.stopPropagation(); updateCampaign(campaign.id, { status: 'active' }); toast.success('Resumed'); }}
+                    >
+                      <PlayCircle className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  {campaign.status === 'scheduled' && (
+                    <span className="text-[10px] text-muted-foreground">{campaign.scheduledAt ? new Date(campaign.scheduledAt).toLocaleDateString() : ''}</span>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"

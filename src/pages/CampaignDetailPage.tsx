@@ -2,6 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useCampaigns } from '@/hooks/use-campaigns';
 import { useEmails } from '@/hooks/use-emails';
 import { useLeads } from '@/hooks/use-leads';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ArrowLeft, Copy } from 'lucide-react';
+import { ArrowLeft, Copy, PauseCircle, PlayCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import CampaignAnalytics from '@/components/campaigns/CampaignAnalytics';
 
@@ -22,14 +23,16 @@ const statusColors: Record<string, string> = {
   active: 'bg-blue-100 text-blue-700',
   paused: 'bg-amber-100 text-amber-700',
   completed: 'bg-emerald-100 text-emerald-700',
+  scheduled: 'bg-violet-100 text-violet-700',
 };
 
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { campaigns, cloneCampaign } = useCampaigns();
+  const { campaigns, cloneCampaign, updateCampaign } = useCampaigns();
   const { emails } = useEmails();
   const { leads } = useLeads();
+  const queryClient = useQueryClient();
 
   const campaign = campaigns.find(c => c.id === id);
   const campaignEmails = emails.filter(e => e.campaignId === id && e.direction === 'outbound');
@@ -67,6 +70,26 @@ export default function CampaignDetailPage() {
     }
   };
 
+  const handlePause = async () => {
+    try {
+      await updateCampaign(campaign.id, { status: 'paused' });
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      toast.success('Campaign paused');
+    } catch {
+      toast.error('Failed to pause');
+    }
+  };
+
+  const handleResume = async () => {
+    try {
+      await updateCampaign(campaign.id, { status: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      toast.success('Campaign resumed');
+    } catch {
+      toast.error('Failed to resume');
+    }
+  };
+
   return (
     <div className="p-6 max-w-[1000px] space-y-6">
       <div className="flex items-center justify-between">
@@ -82,6 +105,9 @@ export default function CampaignDetailPage() {
               Sent {new Date(campaign.sentAt).toLocaleString()} &middot;{' '}
               {campaign.recipientIds.length} recipients
             </p>
+            {campaign.scheduledAt && campaign.status === 'scheduled' && (
+              <p className="text-xs text-muted-foreground">Scheduled for {new Date(campaign.scheduledAt).toLocaleString()}</p>
+            )}
           </div>
           <Badge
             className={`text-xs ${statusColors[campaign.status] ?? statusColors.completed}`}
@@ -89,9 +115,21 @@ export default function CampaignDetailPage() {
             {campaign.status}
           </Badge>
         </div>
-        <Button variant="outline" size="sm" className="gap-1.5" onClick={handleClone}>
-          <Copy className="h-3.5 w-3.5" /> Clone Campaign
-        </Button>
+        <div className="flex items-center gap-2">
+          {(campaign.status === 'active' || campaign.status === 'scheduled') && (
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handlePause}>
+              <PauseCircle className="h-3.5 w-3.5" /> Pause
+            </Button>
+          )}
+          {campaign.status === 'paused' && (
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleResume}>
+              <PlayCircle className="h-3.5 w-3.5" /> Resume
+            </Button>
+          )}
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleClone}>
+            <Copy className="h-3.5 w-3.5" /> Clone Campaign
+          </Button>
+        </div>
       </div>
 
       <CampaignAnalytics {...stats} />

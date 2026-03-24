@@ -2,7 +2,7 @@
 
 > Campaign management dashboard with analytics, unsubscribe infrastructure, and template support.
 
-**Status:** Active (Phase 1b complete — Phase 2 pending)
+**Status:** Active (Phase 2a complete — Phase 2b pending)
 **Last Updated:** 2026-03-23
 **Related Docs:** [OVERVIEW.md](./OVERVIEW.md) | [outreach.md](./outreach.md) | [schema.md](./schema.md)
 
@@ -40,10 +40,31 @@ The campaign engine provides a full campaign management dashboard within the Out
 - Unsubscribe Edge Function handles token validation + record creation
 - Unsubscribed leads excluded from future campaign recipient selection
 
+### Scheduled Sends
+- Date/time picker on the Campaign Builder preview step
+- Campaigns with a `scheduled_at` value are dispatched by the `process-campaigns` Edge Function rather than immediately
+- Scheduler runs every minute via pg_cron: `SELECT cron.schedule('process-campaigns', '* * * * *', ...)`
+
+### Pause / Resume
+- Campaigns in `active` status can be paused (sets status to `paused`)
+- Paused campaigns can be resumed (sets status back to `active`)
+- Pause/Resume actions available from CampaignList and CampaignDetailPage
+
+### Per-Recipient Enrollment Tracking
+- `campaign_enrollments` table records one row per recipient per campaign
+- Columns: `id`, `campaign_id`, `lead_id`, `status` (pending/sent/failed/unsubscribed), `sent_at`, `created_at`, `updated_at`
+- Allows per-lead delivery visibility in the CampaignDetailPage recipient list
+
+### Reply Detection (Auto-Warm Leads)
+- `email-events` Edge Function detects inbound replies referencing a `campaign_id` via `In-Reply-To` header
+- On reply: sets lead `status` to `warm` automatically
+- Enrollment record updated to reflect reply received
+
 ### Campaign Builder
 - Route: `/outreach/campaign/new`
 - Multi-step form: Name + Audience → Template → Preview → Send/Draft
 - Integrates AudienceSelector and TemplateEditor components
+- Preview step includes date/time picker for scheduled sends
 
 ### Template Library
 - Save, load, and delete reusable email templates
@@ -98,6 +119,7 @@ Tracks unsubscribed leads. Token-based lookup. Indexed on lead_id and email.
 | `send-email` | Batch sends now include campaign_id on email rows + inject {{unsubscribeLink}} |
 | `unsubscribe` | Public endpoint — validates token, inserts unsubscribe record |
 | `generate-template` | Generates or improves email templates via GPT-4.1-mini (OpenRouter); temp 0.7 for generation, 0.5 for cleanup |
+| `process-campaigns` | Scheduled via pg_cron (every minute) — queries campaigns where `scheduled_at <= now()` and `status = active`, dispatches sends, updates enrollment records, handles pause checks |
 
 ---
 
@@ -105,7 +127,8 @@ Tracks unsubscribed leads. Token-based lookup. Indexed on lead_id and email.
 
 - **Phase 1a (complete):** DB schema, campaign list + analytics, detail page, unsubscribe infrastructure, cloning
 - **Phase 1b (complete):** Multi-step campaign builder, template library, AI template generation (GPT-4.1-mini), audience selector
-- **Phase 2:** Scheduling, drip sends, follow-up sequences, suspend/resume/edit
+- **Phase 2a (complete):** Scheduled sends (date/time picker), pause/resume, per-recipient enrollment tracking, reply detection (auto-warm leads), pg_cron scheduler
+- **Phase 2b (pending):** Drip sends, follow-up sequences
 - **Phase 3:** Apollo auto-gen pipeline, A/B test execution, smart send timing, lead engagement scoring
 
 ---
@@ -116,3 +139,4 @@ Tracks unsubscribed leads. Token-based lookup. Indexed on lead_id and email.
 |------|--------|----------------|
 | 2026-03-23 | Campaign Engine Phase 1a: DB schema, campaign list, analytics, detail page, unsubscribe, cloning | All campaign files |
 | 2026-03-23 | Campaign Engine Phase 1b: builder, templates, AI generation (GPT-4.1-mini), audience selector | CampaignBuilderPage, TemplateEditor, AudienceSelector, TemplateLibrary, generate-template |
+| 2026-03-23 | Phase 2a: scheduling, pause/resume, enrollment tracking, reply detection, pg_cron scheduler | process-campaigns, CampaignBuilderPage, CampaignDetailPage, CampaignList, email-events |

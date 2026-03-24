@@ -52,6 +52,17 @@ Deno.serve(async (req) => {
             .update({ email_status: 'invalid' })
             .eq('id', email.lead_id)
           console.log(`Marked lead ${email.lead_id} as invalid due to bounce`)
+          // Update enrollment status
+          const emailRow = await supabaseAdmin.from('emails')
+            .select('campaign_id')
+            .eq('provider_message_id', emailId)
+            .single()
+          if (emailRow?.data?.campaign_id) {
+            await supabaseAdmin.from('campaign_enrollments')
+              .update({ status: 'bounced' })
+              .eq('campaign_id', emailRow.data.campaign_id)
+              .eq('lead_id', email.lead_id)
+          }
         }
         break
       }
@@ -60,6 +71,18 @@ Deno.serve(async (req) => {
         await supabaseAdmin.from('emails')
           .update({ opened_at: event.created_at })
           .eq('provider_message_id', emailId)
+        // Update enrollment status
+        const openedEmail = await supabaseAdmin.from('emails')
+          .select('campaign_id, lead_id')
+          .eq('provider_message_id', emailId)
+          .single()
+        if (openedEmail?.data?.campaign_id && openedEmail?.data?.lead_id) {
+          await supabaseAdmin.from('campaign_enrollments')
+            .update({ status: 'opened' })
+            .eq('campaign_id', openedEmail.data.campaign_id)
+            .eq('lead_id', openedEmail.data.lead_id)
+            .eq('status', 'sent') // Only upgrade from 'sent' to 'opened', not from 'replied'
+        }
         break
       }
 
@@ -247,6 +270,39 @@ Deno.serve(async (req) => {
             description: `Received email from ${fromEmail}: "${inboundSubject}"`,
             timestamp: event.created_at,
           })
+        }
+
+        // Reply detection: if this inbound email is a reply to a campaign email,
+        // set campaign_id on the inbound row, update enrollment to 'replied', and flag lead as 'warm'
+        if (replyToId) {
+          // Look up the parent outbound email's campaign_id
+          const { data: parentEmail } = await supabaseAdmin.from('emails')
+            .select('campaign_id')
+            .eq('id', replyToId)
+            .single()
+
+          if (parentEmail?.campaign_id) {
+            // Set campaign_id on the inbound email
+            await supabaseAdmin.from('emails')
+              .update({ campaign_id: parentEmail.campaign_id })
+              .eq('provider_message_id', inboundEmailId)
+
+            // Update enrollment to 'replied'
+            if (matchedLead?.id) {
+              await supabaseAdmin.from('campaign_enrollments')
+                .update({ status: 'replied' })
+                .eq('campaign_id', parentEmail.campaign_id)
+                .eq('lead_id', matchedLead.id)
+
+              // Auto-flag lead as 'warm'
+              await supabaseAdmin.from('leads')
+                .update({ status: 'warm' })
+                .eq('id', matchedLead.id)
+                .neq('status', 'warm')
+
+              console.log(`Reply detected: lead ${matchedLead.id} flagged as warm, campaign ${parentEmail.campaign_id}`)
+            }
+          }
         }
 
         console.log(`Inbound email processed: ${fromEmail} → ${toEmail}, thread: ${threadId}`)

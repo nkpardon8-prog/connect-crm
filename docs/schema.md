@@ -187,6 +187,22 @@ Tracks leads who have opted out of campaigns. Populated by the `unsubscribe` Edg
 
 **Indexes:** lead_id, email, token (unique)
 
+### campaign_enrollments (Phase 2a)
+Per-recipient enrollment tracking for campaigns.
+
+| Column | Type | Constraints | Default |
+|--------|------|-------------|---------|
+| id | uuid | PK | uuid_generate_v4() |
+| campaign_id | uuid | NOT NULL, FK → campaigns(id) ON DELETE CASCADE | — |
+| lead_id | uuid | NOT NULL, FK → leads(id) ON DELETE CASCADE | — |
+| status | text | NOT NULL, CHECK (pending, sent, failed, unsubscribed) | 'pending' |
+| sent_at | timestamptz | — | NULL |
+| created_at | timestamptz | NOT NULL | now() |
+| updated_at | timestamptz | NOT NULL | now() (auto-updated) |
+
+**Indexes:** campaign_id, lead_id, status
+**Unique constraint:** (campaign_id, lead_id) — one enrollment row per recipient per campaign
+
 ### campaign_templates (Phase 1b)
 Template library for reusable campaign email templates.
 
@@ -401,6 +417,7 @@ Supabase Edge Functions provide server-side compute for operations that require 
 | `delete-member` | `supabase/functions/delete-member/index.ts` | Admin-only: deletes a user from `auth.users` (cascades to `profiles`); `ON DELETE SET NULL` on `leads.assigned_to` and `deals.assigned_to` ensures their records are preserved unassigned | — |
 | `unsubscribe` | `supabase/functions/unsubscribe/index.ts` | Public endpoint (no auth): validates token from query param, inserts row into `unsubscribes`, returns confirmation page | — |
 | `generate-template` | `supabase/functions/generate-template/index.ts` | Generates or improves email templates via GPT-4.1-mini; temperature 0.7 for generation from description, 0.5 for cleanup of existing content | OpenRouter (GPT-4.1-mini) |
+| `process-campaigns` | `supabase/functions/process-campaigns/index.ts` | Invoked every minute by pg_cron — queries campaigns where `scheduled_at <= now()` and `status = active`, dispatches sends via Resend, updates `campaign_enrollments` rows, handles paused campaign checks | Resend |
 
 ### campaign-ai
 
@@ -440,6 +457,35 @@ Public endpoint (no auth required). Accepts a `token` query parameter (and optio
 
 **No environment secrets required.**
 
+### process-campaigns
+
+Invoked on a 1-minute schedule via the `pg_cron` PostgreSQL extension. The cron job is registered with:
+
+```sql
+SELECT cron.schedule(
+  'process-campaigns',
+  '* * * * *',
+  $$SELECT net.http_post(url := '<SUPABASE_PROJECT_URL>/functions/v1/process-campaigns', headers := '{"Authorization": "Bearer <SERVICE_ROLE_KEY>"}') AS request_id$$
+);
+```
+
+The function queries for campaigns where `scheduled_at <= now()` and `status = active`, sends emails to all enrolled recipients whose enrollment `status = pending`, and updates each enrollment row to `sent` or `failed`. Paused campaigns are skipped entirely.
+
+**Environment secrets required:** `RESEND_API_KEY`
+
+---
+
+## Scheduler Infrastructure (pg_cron)
+
+The `pg_cron` extension must be enabled on the Supabase project:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+GRANT USAGE ON SCHEMA cron TO postgres;
+```
+
+The `process-campaigns` cron job is then registered as described in its Edge Function section above. To inspect registered jobs: `SELECT * FROM cron.job;`
+
 ---
 
 ## Known Limitations
@@ -473,3 +519,4 @@ Public endpoint (no auth required). Accepts a `token` query parameter (and optio
 | 2026-03-23 | Team management: invites table, create-invite / signup-with-token / delete-member Edge Functions, FK changes (leads.assigned_to, deals.assigned_to now ON DELETE SET NULL) | invites table, supabase/functions/ |
 | 2026-03-23 | Campaign Engine Phase 1a: new columns on campaigns (name, status, scheduled_at, drip_config, variant_b_subject, variant_b_body, ab_test_enabled, sequence_id), campaign_id FK on emails, new tables (unsubscribes, campaign_templates, campaign_sequences, campaign_steps), unsubscribe Edge Function | campaigns, emails, supabase/functions/ |
 | 2026-03-23 | Campaign Engine Phase 1b: generate-template Edge Function (GPT-4.1-mini via OpenRouter) for AI template generation and cleanup | supabase/functions/generate-template/ |
+| 2026-03-23 | Campaign Engine Phase 2a: campaign_enrollments table (per-recipient tracking), process-campaigns Edge Function, pg_cron scheduler setup | campaign_enrollments, supabase/functions/process-campaigns/ |

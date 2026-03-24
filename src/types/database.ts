@@ -264,6 +264,60 @@ export type Database = {
           },
         ]
       }
+      campaign_enrollments: {
+        Row: {
+          id: string
+          campaign_id: string
+          lead_id: string | null
+          email: string
+          status: string
+          sent_at: string | null
+          next_send_at: string | null
+          current_step: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          campaign_id: string
+          lead_id?: string | null
+          email: string
+          status?: string
+          sent_at?: string | null
+          next_send_at?: string | null
+          current_step?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          campaign_id?: string
+          lead_id?: string | null
+          email?: string
+          status?: string
+          sent_at?: string | null
+          next_send_at?: string | null
+          current_step?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_enrollments_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_enrollments_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaigns: {
         Row: {
           ab_test_enabled: boolean

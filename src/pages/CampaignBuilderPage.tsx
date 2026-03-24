@@ -20,7 +20,7 @@ export default function CampaignBuilderPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { leads } = useLeads();
-  const { addCampaignAsync, updateCampaign } = useCampaigns();
+  const { addCampaignAsync, updateCampaign, createEnrollments } = useCampaigns();
   const { addActivity } = useActivities();
   const queryClient = useQueryClient();
 
@@ -30,6 +30,8 @@ export default function CampaignBuilderPage() {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
+  const [sendMode, setSendMode] = useState<'now' | 'schedule'>('now');
+  const [scheduledAt, setScheduledAt] = useState('');
 
   // Only show leads with verified emails
   const emailSafeLeads = useMemo(() =>
@@ -59,6 +61,34 @@ export default function CampaignBuilderPage() {
       toast.error('Set your sending email in Settings before sending');
       return;
     }
+
+    if (sendMode === 'schedule') {
+      if (!scheduledAt) { toast.error('Select a date and time'); return; }
+      try {
+        const campaign = await addCampaignAsync({
+          name: campaignName.trim(),
+          subject: subject.trim(),
+          body: body.trim(),
+          recipientIds: Array.from(selectedLeadIds),
+          sentAt: new Date().toISOString(),
+          sentBy: user.id,
+          status: 'scheduled',
+          scheduledAt: new Date(scheduledAt).toISOString(),
+          abTestEnabled: false,
+        });
+        const recipients = Array.from(selectedLeadIds).map(leadId => {
+          const lead = leads.find(l => l.id === leadId);
+          return { leadId, email: lead?.email || '' };
+        }).filter(r => r.email);
+        await createEnrollments(campaign.id, recipients);
+        toast.success(`Campaign scheduled for ${new Date(scheduledAt).toLocaleString()}`);
+        navigate('/outreach');
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to schedule campaign');
+      }
+      return;
+    }
+
     setSending(true);
     try {
       // Create campaign as draft first
@@ -91,8 +121,15 @@ export default function CampaignBuilderPage() {
 
       const result = await sendBulkEmails(campaignEmails, campaign.id);
 
-      // Update campaign status to active on success
+      // Update campaign status to completed on success
       await updateCampaign(campaign.id, { status: 'completed' });
+
+      // Create enrollment rows for tracking
+      const recipients = recipientIds.map(leadId => {
+        const lead = leads.find(l => l.id === leadId);
+        return { leadId, email: lead?.email || '' };
+      }).filter(r => r.email);
+      await createEnrollments(campaign.id, recipients);
 
       if (result?.failedCount > 0) {
         toast.warning(`${result.failedCount} of ${campaignEmails.length} emails failed`);
@@ -266,6 +303,20 @@ export default function CampaignBuilderPage() {
                 <p className="font-medium">{user?.sendingEmail || 'Not set'}</p>
               </div>
             </div>
+            <div className="flex items-center gap-3 mb-4">
+              <Button variant={sendMode === 'now' ? 'default' : 'outline'} size="sm" onClick={() => setSendMode('now')}>
+                Send Now
+              </Button>
+              <Button variant={sendMode === 'schedule' ? 'default' : 'outline'} size="sm" onClick={() => setSendMode('schedule')}>
+                Schedule
+              </Button>
+            </div>
+            {sendMode === 'schedule' && (
+              <div className="space-y-2 mb-4">
+                <Label>Send Date & Time</Label>
+                <Input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} min={new Date().toISOString().slice(0, 16)} />
+              </div>
+            )}
             <div className="flex justify-between pt-4">
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setStep(3)} className="gap-1.5">
@@ -276,7 +327,7 @@ export default function CampaignBuilderPage() {
                 </Button>
               </div>
               <Button onClick={handleSend} disabled={sending || !user?.sendingEmail} className="gap-1.5">
-                <Send className="h-3.5 w-3.5" /> {sending ? 'Sending...' : `Send to ${selectedLeadIds.size} Recipients`}
+                <Send className="h-3.5 w-3.5" /> {sending ? 'Sending...' : sendMode === 'schedule' ? `Schedule for ${selectedLeadIds.size} Recipients` : `Send to ${selectedLeadIds.size} Recipients`}
               </Button>
             </div>
           </CardContent>

@@ -44,5 +44,7 @@ export function useCampaigns() {
       updateCampaignMutation.mutateAsync({ id, updates }),
     cloneCampaign: (id: string) => cloneCampaignMutation.mutateAsync(id),
     deleteCampaign: (id: string) => deleteCampaignMutation.mutateAsync(id),
+    createEnrollments: (campaignId: string, recipients: { leadId: string; email: string }[]) =>
+      api.createEnrollments(campaignId, recipients),
   };
 }

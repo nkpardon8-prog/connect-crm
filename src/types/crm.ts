@@ -109,13 +109,26 @@ export interface Campaign {
   recipientIds: string[];
   sentAt: string;
   sentBy: string;
-  status: 'draft' | 'active' | 'paused' | 'completed';
+  status: 'draft' | 'active' | 'paused' | 'completed' | 'scheduled';
   scheduledAt?: string;
   dripConfig?: Record<string, unknown>;
   variantBSubject?: string;
   variantBBody?: string;
   abTestEnabled: boolean;
   sequenceId?: string;
+}
+
+export interface CampaignEnrollment {
+  id: string;
+  campaignId: string;
+  leadId?: string;
+  email: string;
+  status: 'pending' | 'sent' | 'opened' | 'replied' | 'bounced' | 'unsubscribed';
+  sentAt?: string;
+  nextSendAt?: string;
+  currentStep: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CampaignTemplate {

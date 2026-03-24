@@ -67,7 +67,7 @@ When adding changelog entries, use this format:
 | 10 | Settings | [settings.md](./settings.md) | Active | Profile editing (name + sending email), team management (invite new members, delete members), integrations status |
 | 11 | UI Components | [ui-components.md](./ui-components.md) | Active | shadcn/ui library, layout shell, custom components |
 | 12 | Database Schema | [schema.md](./schema.md) | Active | Supabase PostgreSQL schema, RLS policies, triggers, API layer |
-| 13 | Campaign Engine | [campaigns.md](./campaigns.md) | Active (Phase 1b) | Campaign management dashboard, analytics, unsubscribe infrastructure, cloning, builder, template library, AI generation |
+| 13 | Campaign Engine | [campaigns.md](./campaigns.md) | Active (Phase 2a) | Campaign management dashboard, analytics, unsubscribe infrastructure, cloning, builder, template library, AI generation, scheduled sends, pause/resume, enrollment tracking, reply detection |
 
 **Status definitions:**
 - **Active** — Feature is functional with working interactions
@@ -256,3 +256,4 @@ Track all significant changes here: new features, architectural shifts, new rout
 | 2026-03-23 | Team management: invite tokens, signup flow, member deletion | Authentication, Settings, Schema | Admin generates invite link via create-invite Edge Function; new member signs up with token + password via signup-with-token Edge Function (auto-login on success); admin can delete members via delete-member Edge Function; leads/deals preserved unassigned on member deletion (ON DELETE SET NULL); login page now has Sign In / Sign Up toggle |
 | 2026-03-23 | Campaign Engine Phase 1a: campaign management dashboard, analytics, detail page, cloning, unsubscribe infrastructure | Outreach, Schema | CampaignList replaces old history cards; CampaignDetailPage at /outreach/campaign/:id; analytics from emails.campaign_id FK; token-based unsubscribe at /unsubscribe/:token; new DB tables (unsubscribes, campaign_templates, campaign_sequences, campaign_steps); expanded campaigns schema |
 | 2026-03-23 | Campaign Engine Phase 1b: multi-step builder, template library, AI generation (GPT-4.1-mini), audience selector | Campaigns, Outreach | New campaign builder page, TemplateEditor with AI assist, template save/load, AudienceSelector component |
+| 2026-03-23 | Campaign Engine Phase 2a: scheduled sends, pause/resume, enrollment tracking, reply detection, pg_cron | Campaigns | Scheduler infrastructure, per-recipient tracking, auto-warm on reply |
