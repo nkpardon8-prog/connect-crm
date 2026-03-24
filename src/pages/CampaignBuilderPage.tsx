@@ -11,16 +11,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { ArrowLeft, ArrowRight, Send, Save, Eye, Users, FileText } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Send, Save, Eye, Users, FileText, FlaskConical, Zap } from 'lucide-react';
 import AudienceSelector from '@/components/campaigns/AudienceSelector';
 import TemplateEditor from '@/components/campaigns/TemplateEditor';
 import SequenceEditor from '@/components/campaigns/SequenceEditor';
+import ABVariantEditor from '@/components/campaigns/ABVariantEditor';
+import { searchApollo } from '@/lib/api/apollo';
 
 export default function CampaignBuilderPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { leads } = useLeads();
+  const { leads, addLeads } = useLeads();
   const { addCampaignAsync, updateCampaign, createEnrollments, createSequenceWithSteps } = useCampaigns();
   const { addActivity } = useActivities();
   const queryClient = useQueryClient();
@@ -35,6 +40,16 @@ export default function CampaignBuilderPage() {
   const [scheduledAt, setScheduledAt] = useState('');
   const [useSequence, setUseSequence] = useState(false);
   const [followUps, setFollowUps] = useState<{ subject: string; body: string; delayDays: number }[]>([]);
+
+  const [abTestEnabled, setAbTestEnabled] = useState(false);
+  const [variantBSubject, setVariantBSubject] = useState('');
+  const [variantBBody, setVariantBBody] = useState('');
+
+  // Apollo auto-gen state
+  const [showApolloGen, setShowApolloGen] = useState(false);
+  const [apolloPrompt, setApolloPrompt] = useState('');
+  const [apolloCount, setApolloCount] = useState(25);
+  const [apolloLoading, setApolloLoading] = useState(false);
 
   // Only show leads with verified emails
   const emailSafeLeads = useMemo(() =>
@@ -85,7 +100,9 @@ export default function CampaignBuilderPage() {
           sentBy: user.id,
           status: 'scheduled',
           scheduledAt: new Date(scheduledAt).toISOString(),
-          abTestEnabled: false,
+          abTestEnabled,
+          variantBSubject: abTestEnabled ? variantBSubject.trim() : undefined,
+          variantBBody: abTestEnabled ? variantBBody.trim() : undefined,
           sequenceId: sequenceId || undefined,
         });
         const recipients = Array.from(selectedLeadIds).map(leadId => {
@@ -112,7 +129,9 @@ export default function CampaignBuilderPage() {
         sentAt: new Date().toISOString(),
         sentBy: user.id,
         status: 'draft',
-        abTestEnabled: false,
+        abTestEnabled,
+        variantBSubject: abTestEnabled ? variantBSubject.trim() : undefined,
+        variantBBody: abTestEnabled ? variantBBody.trim() : undefined,
       });
 
       // Send emails
@@ -232,6 +251,12 @@ export default function CampaignBuilderPage() {
               <Label>Campaign Name</Label>
               <Input placeholder="e.g., Q1 SaaS Outreach" value={campaignName} onChange={e => setCampaignName(e.target.value)} />
             </div>
+            <div className="flex items-center gap-2 mb-4">
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowApolloGen(true)}>
+                <Zap className="h-3.5 w-3.5" /> Auto-Generate Leads
+              </Button>
+              <span className="text-xs text-muted-foreground">Search Apollo.io for leads matching your ideal customer profile</span>
+            </div>
             <AudienceSelector leads={emailSafeLeads} selectedIds={selectedLeadIds} onSelectionChange={setSelectedLeadIds} />
             <div className="flex justify-end">
               <Button onClick={() => setStep(2)} disabled={!canProceedStep1} className="gap-1.5">
@@ -268,6 +293,29 @@ export default function CampaignBuilderPage() {
                 followUps={followUps}
                 onFollowUpsChange={setFollowUps}
               />
+            )}
+            {!useSequence && (
+              <div className="space-y-3 mt-4 pt-4 border-t">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={abTestEnabled ? 'default' : 'outline'}
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => setAbTestEnabled(!abTestEnabled)}
+                  >
+                    <FlaskConical className="h-3.5 w-3.5" /> {abTestEnabled ? 'A/B Test Enabled' : 'Enable A/B Test'}
+                  </Button>
+                  {abTestEnabled && <span className="text-xs text-muted-foreground">Variant A is your template above. Add Variant B below.</span>}
+                </div>
+                {abTestEnabled && (
+                  <ABVariantEditor
+                    subject={variantBSubject}
+                    body={variantBBody}
+                    onSubjectChange={setVariantBSubject}
+                    onBodyChange={setVariantBBody}
+                  />
+                )}
+              </div>
             )}
             <div className="flex justify-between">
               <Button variant="outline" onClick={() => setStep(1)} className="gap-1.5">
@@ -380,6 +428,57 @@ export default function CampaignBuilderPage() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={showApolloGen} onOpenChange={setShowApolloGen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate Leads via Apollo</DialogTitle>
+            <DialogDescription>Describe your ideal customer and we'll search Apollo.io for matching contacts.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Describe your ideal customer</Label>
+              <Textarea placeholder="e.g., CTOs at SaaS companies, 50-200 employees, based in Austin" value={apolloPrompt} onChange={e => setApolloPrompt(e.target.value)} className="min-h-[80px]" />
+            </div>
+            <div className="space-y-2">
+              <Label>Number of leads</Label>
+              <Select value={String(apolloCount)} onValueChange={v => setApolloCount(Number(v))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10 leads</SelectItem>
+                  <SelectItem value="25">25 leads</SelectItem>
+                  <SelectItem value="50">50 leads</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground">Estimated Apollo credits: ~{apolloCount * 2}</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowApolloGen(false)}>Cancel</Button>
+            <Button onClick={async () => {
+              setApolloLoading(true);
+              try {
+                const result = await searchApollo(apolloPrompt, apolloCount);
+                if (result.leads.length > 0) {
+                  const cleaned = result.leads.map(({ id: _id, createdAt: _createdAt, ...rest }) => ({ ...rest, assignedTo: user!.id }));
+                  addLeads(cleaned);
+                  toast.success(`${result.leads.length} leads generated and imported. Select them in the audience below.`);
+                } else {
+                  toast.error('No leads found. Try broadening your search.');
+                }
+                setShowApolloGen(false);
+                setApolloPrompt('');
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : 'Apollo search failed');
+              } finally {
+                setApolloLoading(false);
+              }
+            }} disabled={apolloLoading || !apolloPrompt.trim()} className="gap-1.5">
+              <Zap className="h-3.5 w-3.5" /> {apolloLoading ? 'Searching...' : 'Generate Leads'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

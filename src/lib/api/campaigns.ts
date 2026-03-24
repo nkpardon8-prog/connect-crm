@@ -135,6 +135,38 @@ export async function getEnrollments(campaignId: string) {
   return transformRows<{ id: string; campaignId: string; leadId: string | null; email: string; status: string; sentAt: string | null }>(data || []);
 }
 
+export async function getCampaignABAnalytics(campaignId: string) {
+  const { data: enrollments } = await supabase
+    .from('campaign_enrollments')
+    .select('id, ab_variant, lead_id, email')
+    .eq('campaign_id', campaignId);
+
+  const { data: emails } = await supabase
+    .from('emails')
+    .select('lead_id, opened_at, clicked_at, bounced_at')
+    .eq('campaign_id', campaignId)
+    .eq('direction', 'outbound');
+
+  const emailMap = new Map<string, { opened: boolean; clicked: boolean; bounced: boolean }>();
+  for (const e of emails || []) {
+    if (e.lead_id) emailMap.set(e.lead_id, {
+      opened: !!e.opened_at, clicked: !!e.clicked_at, bounced: !!e.bounced_at,
+    });
+  }
+
+  const calcStats = (variant: string) => {
+    const group = enrollments?.filter(e => e.ab_variant === variant) || [];
+    return {
+      sent: group.length,
+      opened: group.filter(e => e.lead_id && emailMap.get(e.lead_id)?.opened).length,
+      clicked: group.filter(e => e.lead_id && emailMap.get(e.lead_id)?.clicked).length,
+      bounced: group.filter(e => e.lead_id && emailMap.get(e.lead_id)?.bounced).length,
+    };
+  };
+
+  return { a: calcStats('A'), b: calcStats('B') };
+}
+
 export async function getCampaignAnalytics(campaignId: string) {
   const { data: emails, error } = await supabase
     .from('emails')

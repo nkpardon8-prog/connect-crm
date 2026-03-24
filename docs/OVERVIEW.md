@@ -67,7 +67,7 @@ When adding changelog entries, use this format:
 | 10 | Settings | [settings.md](./settings.md) | Active | Profile editing (name + sending email), team management (invite new members, delete members), integrations status |
 | 11 | UI Components | [ui-components.md](./ui-components.md) | Active | shadcn/ui library, layout shell, custom components |
 | 12 | Database Schema | [schema.md](./schema.md) | Active | Supabase PostgreSQL schema, RLS policies, triggers, API layer |
-| 13 | Campaign Engine | [campaigns.md](./campaigns.md) | Active (Phase 2b) | Campaign management dashboard, analytics, unsubscribe infrastructure, cloning, builder, template library, AI generation, scheduled sends, pause/resume, enrollment tracking, reply detection, multi-step drip sequences, stop conditions |
+| 13 | Campaign Engine | [campaigns.md](./campaigns.md) | Active (Phase 3a) | Campaign management dashboard, analytics, unsubscribe infrastructure, cloning, builder, template library, AI generation, scheduled sends, pause/resume, enrollment tracking, reply detection, multi-step drip sequences, stop conditions, A/B testing, Apollo auto-gen pipeline |
 
 **Status definitions:**
 - **Active** — Feature is functional with working interactions
@@ -258,3 +258,4 @@ Track all significant changes here: new features, architectural shifts, new rout
 | 2026-03-23 | Campaign Engine Phase 1b: multi-step builder, template library, AI generation (GPT-4.1-mini), audience selector | Campaigns, Outreach | New campaign builder page, TemplateEditor with AI assist, template save/load, AudienceSelector component |
 | 2026-03-23 | Campaign Engine Phase 2a: scheduled sends, pause/resume, enrollment tracking, reply detection, pg_cron | Campaigns | Scheduler infrastructure, per-recipient tracking, auto-warm on reply |
 | 2026-03-23 | Campaign Engine Phase 2b: drip sequences with up to 5 steps, delay-based follow-ups, stop conditions | Campaigns | SequenceEditor component, scheduler processes drip steps, sequence progress in campaign detail |
+| 2026-03-23 | Campaign Engine Phase 3a: A/B testing (full body variants, 50/50 split, per-variant analytics, winner comparison), Apollo auto-gen pipeline from campaign builder with credit confirmation | Campaigns | CampaignBuilderPage, CampaignDetailPage, CampaignAnalytics, send-email |

@@ -15,6 +15,7 @@ Deno.serve(async (req) => {
     let systemPrompt: string
     let userPrompt: string
     let temperature: number
+    let responseFormat: Record<string, unknown>
 
     if (mode === 'cleanup') {
       systemPrompt = `You are a world-class sales email copywriting expert. The user will provide an existing email template. Your job is to significantly improve it:
@@ -28,6 +29,39 @@ Deno.serve(async (req) => {
 Return a JSON object with "subject" and "body" fields.`
       userPrompt = `Please improve this email template:\n\nSubject: ${existingSubject}\n\nBody:\n${existingBody}`
       temperature = 0.5
+      responseFormat = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'email_template',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              subject: { type: 'string' },
+              body: { type: 'string' },
+            },
+            required: ['subject', 'body'],
+            additionalProperties: false,
+          },
+        },
+      }
+    } else if (mode === 'analyze') {
+      systemPrompt = `You are a marketing analytics expert. Analyze the A/B test results and provide a concise 2-3 sentence summary of which variant performed better and why. Be specific about the numbers.`
+      userPrompt = prompt // Will contain the stats as a string
+      temperature = 0.3
+      responseFormat = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'ab_analysis',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: { analysis: { type: 'string' } },
+            required: ['analysis'],
+            additionalProperties: false,
+          },
+        },
+      }
     } else {
       systemPrompt = `You are a world-class sales email copywriting expert. Generate a professional outreach email template based on the user's description.
 - Use merge fields {{firstName}} and {{company}} where appropriate
@@ -39,6 +73,22 @@ Return a JSON object with "subject" and "body" fields.`
 Return a JSON object with "subject" and "body" fields.`
       userPrompt = prompt || 'Write a general cold outreach email for a B2B SaaS product'
       temperature = 0.7
+      responseFormat = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'email_template',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              subject: { type: 'string' },
+              body: { type: 'string' },
+            },
+            required: ['subject', 'body'],
+            additionalProperties: false,
+          },
+        },
+      }
     }
 
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -54,22 +104,7 @@ Return a JSON object with "subject" and "body" fields.`
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'email_template',
-            strict: true,
-            schema: {
-              type: 'object',
-              properties: {
-                subject: { type: 'string' },
-                body: { type: 'string' },
-              },
-              required: ['subject', 'body'],
-              additionalProperties: false,
-            },
-          },
-        },
+        response_format: responseFormat,
         temperature,
       }),
     })

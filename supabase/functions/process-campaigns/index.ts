@@ -88,12 +88,24 @@ Deno.serve(async (req) => {
 
       // Build email batch
       const resendEmails = enrollments.map(e => {
+        // Determine A/B variant
+        let useVariantB = false
+        if (campaign.ab_test_enabled && campaign.variant_b_subject && campaign.variant_b_body) {
+          const hash = e.id.split('').reduce((sum: number, c: string) => sum + c.charCodeAt(0), 0)
+          useVariantB = hash % 2 === 1
+        }
+
+        const templateSubject = useVariantB ? (campaign.variant_b_subject as string) : campaign.subject
+        const templateBody = useVariantB ? (campaign.variant_b_body as string) : campaign.body
+
+        ;(e as Record<string, unknown>)._variant = useVariantB ? 'B' : 'A'
+
         const lead = e.lead_id ? leadMap.get(e.lead_id) : null
-        let emailBody = campaign.body
+        let emailBody = templateBody
           .replace(/\{\{firstName\}\}/g, lead?.first_name || '')
           .replace(/\{\{company\}\}/g, lead?.company || '')
 
-        const emailSubject = campaign.subject
+        const emailSubject = templateSubject
           .replace(/\{\{firstName\}\}/g, lead?.first_name || '')
           .replace(/\{\{company\}\}/g, lead?.company || '')
 
@@ -148,11 +160,19 @@ Deno.serve(async (req) => {
 
           await supabaseAdmin.from('emails').insert(emailRows)
 
-          // Update enrollments to 'sent'
-          const enrollmentIds = batchEnrollments.map(e => e.id)
-          await supabaseAdmin.from('campaign_enrollments')
-            .update({ status: 'sent', sent_at: new Date().toISOString() })
-            .in('id', enrollmentIds)
+          // Update enrollments to 'sent', grouped by A/B variant
+          const variantAIds = batchEnrollments.filter((e: Record<string, unknown>) => e._variant === 'A').map(e => e.id)
+          const variantBIds = batchEnrollments.filter((e: Record<string, unknown>) => e._variant === 'B').map(e => e.id)
+          if (variantAIds.length) {
+            await supabaseAdmin.from('campaign_enrollments')
+              .update({ status: 'sent', sent_at: new Date().toISOString(), ab_variant: 'A' })
+              .in('id', variantAIds)
+          }
+          if (variantBIds.length) {
+            await supabaseAdmin.from('campaign_enrollments')
+              .update({ status: 'sent', sent_at: new Date().toISOString(), ab_variant: 'B' })
+              .in('id', variantBIds)
+          }
         } else {
           console.error('Resend batch failed:', res.status, await res.text())
         }

@@ -274,6 +274,7 @@ export type Database = {
           sent_at: string | null
           next_send_at: string | null
           current_step: number
+          ab_variant: string | null
           created_at: string
           updated_at: string
         }
@@ -286,6 +287,7 @@ export type Database = {
           sent_at?: string | null
           next_send_at?: string | null
           current_step?: number
+          ab_variant?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -298,6 +300,7 @@ export type Database = {
           sent_at?: string | null
           next_send_at?: string | null
           current_step?: number
+          ab_variant?: string | null
           created_at?: string
           updated_at?: string
         }

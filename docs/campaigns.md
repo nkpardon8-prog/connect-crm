@@ -2,7 +2,7 @@
 
 > Campaign management dashboard with analytics, unsubscribe infrastructure, and template support.
 
-**Status:** Active (Phase 2b complete — Phase 3 pending)
+**Status:** Active (Phase 3a complete — Phase 3b pending)
 **Last Updated:** 2026-03-23
 **Related Docs:** [OVERVIEW.md](./OVERVIEW.md) | [outreach.md](./outreach.md) | [schema.md](./schema.md)
 
@@ -88,6 +88,19 @@ The campaign engine provides a full campaign management dashboard within the Out
 - Generate from description: temperature 0.7 (creative generation)
 - Cleanup/improve existing content: temperature 0.5 (conservative edits)
 
+### A/B Testing
+- Campaigns support two full body variants (Variant A and Variant B), each with independent subject and body fields
+- Split is 50/50: recipients are divided evenly between variants at send time
+- Per-variant analytics tracked independently: sent, opened, clicked, bounced counts and rates
+- Winner comparison view in CampaignDetailPage shows side-by-side variant performance
+- `ab_test_enabled`, `variant_b_subject`, `variant_b_body` columns on the `campaigns` table
+
+### Apollo Auto-Gen Pipeline
+- Campaign builder includes an "Auto-Generate Audience from Apollo" option
+- Triggers an Apollo search directly from the campaign builder (keyword + filters)
+- Credit confirmation dialog shown before executing the search (displays estimated credit cost)
+- Results are added to the audience selector for immediate use in the campaign
+
 ### TemplateEditor
 - Rich editing with AI Generate, AI Improve, Template Library, Save to Library, and formatting toolbar
 
@@ -141,7 +154,8 @@ Tracks unsubscribed leads. Token-based lookup. Indexed on lead_id and email.
 - **Phase 1b (complete):** Multi-step campaign builder, template library, AI template generation (GPT-4.1-mini), audience selector
 - **Phase 2a (complete):** Scheduled sends (date/time picker), pause/resume, per-recipient enrollment tracking, reply detection (auto-warm leads), pg_cron scheduler
 - **Phase 2b (complete):** Multi-step drip sequences (up to 5 steps), SequenceEditor, scheduler drip processing, stop conditions, sequence progress display
-- **Phase 3:** Apollo auto-gen pipeline, A/B test execution, smart send timing, lead engagement scoring
+- **Phase 3a (complete):** A/B testing (full body variants, 50/50 split, per-variant analytics, winner comparison), Apollo auto-gen pipeline from campaign builder with credit confirmation
+- **Phase 3b (pending):** Smart send timing, lead engagement scoring
 
 ---
 
@@ -153,3 +167,4 @@ Tracks unsubscribed leads. Token-based lookup. Indexed on lead_id and email.
 | 2026-03-23 | Campaign Engine Phase 1b: builder, templates, AI generation (GPT-4.1-mini), audience selector | CampaignBuilderPage, TemplateEditor, AudienceSelector, TemplateLibrary, generate-template |
 | 2026-03-23 | Phase 2a: scheduling, pause/resume, enrollment tracking, reply detection, pg_cron scheduler | process-campaigns, CampaignBuilderPage, CampaignDetailPage, CampaignList, email-events |
 | 2026-03-23 | Phase 2b: multi-step drip sequences, SequenceEditor, scheduler drip processing, stop conditions, sequence progress display | SequenceEditor, CampaignBuilderPage, process-campaigns, CampaignDetailPage |
+| 2026-03-23 | Phase 3a: A/B testing (full body variants, 50/50 split, per-variant analytics, winner comparison), Apollo auto-gen pipeline with credit confirmation | CampaignBuilderPage, CampaignDetailPage, CampaignAnalytics, send-email |

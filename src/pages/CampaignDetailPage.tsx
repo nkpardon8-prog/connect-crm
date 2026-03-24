@@ -5,6 +5,7 @@ import { useEmails } from '@/hooks/use-emails';
 import { useLeads } from '@/hooks/use-leads';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { getCampaignABAnalytics } from '@/lib/api/campaigns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ArrowLeft, Copy, PauseCircle, PlayCircle } from 'lucide-react';
+import { ArrowLeft, Copy, PauseCircle, PlayCircle, FlaskConical } from 'lucide-react';
 import { toast } from 'sonner';
 import CampaignAnalytics from '@/components/campaigns/CampaignAnalytics';
 
@@ -50,6 +51,14 @@ export default function CampaignDetailPage() {
         if (data) setEnrollments(data.map(e => ({ leadId: e.lead_id, status: e.status, currentStep: e.current_step })));
       });
   }, [id]);
+
+  const [abStats, setAbStats] = useState<{ a: { sent: number; opened: number; clicked: number; bounced: number }; b: { sent: number; opened: number; clicked: number; bounced: number } } | null>(null);
+
+  useEffect(() => {
+    if (campaign?.abTestEnabled && id) {
+      getCampaignABAnalytics(id).then(setAbStats);
+    }
+  }, [campaign, id]);
 
   if (!campaign) {
     return (
@@ -147,6 +156,49 @@ export default function CampaignDetailPage() {
       </div>
 
       <CampaignAnalytics {...stats} />
+
+      {campaign.abTestEnabled && abStats && (
+        <Card className="border">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2"><FlaskConical className="h-4 w-4" /> A/B Test Results</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <h4 className="text-xs font-medium text-foreground">Variant A</h4>
+                <p className="text-xs text-muted-foreground truncate">{campaign.subject}</p>
+                <div className="text-xs space-y-1">
+                  <p>Sent: {abStats.a.sent}</p>
+                  <p>Opened: {abStats.a.opened} ({abStats.a.sent > 0 ? Math.round((abStats.a.opened / abStats.a.sent) * 100) : 0}%)</p>
+                  <p>Clicked: {abStats.a.clicked}</p>
+                  <p>Bounced: {abStats.a.bounced}</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <h4 className="text-xs font-medium text-foreground">Variant B</h4>
+                <p className="text-xs text-muted-foreground truncate">{campaign.variantBSubject}</p>
+                <div className="text-xs space-y-1">
+                  <p>Sent: {abStats.b.sent}</p>
+                  <p>Opened: {abStats.b.opened} ({abStats.b.sent > 0 ? Math.round((abStats.b.opened / abStats.b.sent) * 100) : 0}%)</p>
+                  <p>Clicked: {abStats.b.clicked}</p>
+                  <p>Bounced: {abStats.b.bounced}</p>
+                </div>
+              </div>
+            </div>
+            {abStats.a.sent >= 5 && abStats.b.sent >= 5 && (
+              <div className="mt-3 pt-3 border-t">
+                <p className="text-xs text-muted-foreground">
+                  {abStats.a.opened / Math.max(abStats.a.sent, 1) > abStats.b.opened / Math.max(abStats.b.sent, 1)
+                    ? `Variant A is winning with a ${Math.round((abStats.a.opened / abStats.a.sent) * 100)}% open rate vs ${Math.round((abStats.b.opened / abStats.b.sent) * 100)}% for Variant B.`
+                    : abStats.b.opened / Math.max(abStats.b.sent, 1) > abStats.a.opened / Math.max(abStats.a.sent, 1)
+                      ? `Variant B is winning with a ${Math.round((abStats.b.opened / abStats.b.sent) * 100)}% open rate vs ${Math.round((abStats.a.opened / abStats.a.sent) * 100)}% for Variant A.`
+                      : 'Both variants are performing equally so far.'}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="border">
         <CardHeader className="pb-2">
