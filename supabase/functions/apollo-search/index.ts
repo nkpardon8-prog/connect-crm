@@ -22,6 +22,7 @@ interface LeadResult {
   companySize: string
   industry: string
   location: string
+  timezone: string | null
   status: string
   assignedTo: string
   lastContactedAt: null
@@ -120,6 +121,62 @@ RULES:
   }
 
   return JSON.parse(data.choices[0].message.content)
+}
+
+function deriveTimezone(city: string, state: string, country: string): string | null {
+  const parts = [city, state, country].map(s => (s || '').trim().toLowerCase())
+  const stateToken = parts[1]
+  const countryToken = parts[2]
+
+  const usTimezones: Record<string, string> = {
+    'california': 'America/Los_Angeles', 'washington': 'America/Los_Angeles',
+    'oregon': 'America/Los_Angeles', 'nevada': 'America/Los_Angeles',
+    'texas': 'America/Chicago', 'illinois': 'America/Chicago',
+    'minnesota': 'America/Chicago', 'wisconsin': 'America/Chicago',
+    'missouri': 'America/Chicago', 'iowa': 'America/Chicago',
+    'louisiana': 'America/Chicago', 'oklahoma': 'America/Chicago',
+    'tennessee': 'America/Chicago', 'kansas': 'America/Chicago',
+    'nebraska': 'America/Chicago', 'north dakota': 'America/Chicago',
+    'south dakota': 'America/Chicago',
+    'new york': 'America/New_York', 'florida': 'America/New_York',
+    'georgia': 'America/New_York', 'north carolina': 'America/New_York',
+    'south carolina': 'America/New_York', 'virginia': 'America/New_York',
+    'west virginia': 'America/New_York', 'massachusetts': 'America/New_York',
+    'pennsylvania': 'America/New_York', 'new jersey': 'America/New_York',
+    'connecticut': 'America/New_York', 'maryland': 'America/New_York',
+    'ohio': 'America/New_York', 'michigan': 'America/New_York',
+    'indiana': 'America/New_York', 'maine': 'America/New_York',
+    'vermont': 'America/New_York', 'new hampshire': 'America/New_York',
+    'rhode island': 'America/New_York', 'delaware': 'America/New_York',
+    'district of columbia': 'America/New_York', 'dc': 'America/New_York',
+    'colorado': 'America/Denver', 'utah': 'America/Denver',
+    'arizona': 'America/Denver', 'new mexico': 'America/Denver',
+    'montana': 'America/Denver', 'wyoming': 'America/Denver', 'idaho': 'America/Denver',
+    'hawaii': 'Pacific/Honolulu', 'alaska': 'America/Anchorage',
+  }
+
+  for (const [st, tz] of Object.entries(usTimezones)) {
+    if (stateToken === st || stateToken.includes(st)) return tz
+  }
+
+  const countryTimezones: Record<string, string> = {
+    'united kingdom': 'Europe/London', 'uk': 'Europe/London', 'england': 'Europe/London',
+    'germany': 'Europe/Berlin', 'france': 'Europe/Paris', 'spain': 'Europe/Madrid',
+    'italy': 'Europe/Rome', 'netherlands': 'Europe/Amsterdam',
+    'india': 'Asia/Kolkata', 'australia': 'Australia/Sydney',
+    'japan': 'Asia/Tokyo', 'china': 'Asia/Shanghai',
+    'canada': 'America/Toronto', 'brazil': 'America/Sao_Paulo',
+    'mexico': 'America/Mexico_City', 'israel': 'Asia/Jerusalem',
+    'singapore': 'Asia/Singapore', 'south korea': 'Asia/Seoul',
+    'united arab emirates': 'Asia/Dubai', 'sweden': 'Europe/Stockholm',
+    'switzerland': 'Europe/Zurich', 'ireland': 'Europe/Dublin',
+  }
+
+  for (const [c, tz] of Object.entries(countryTimezones)) {
+    if (countryToken.includes(c)) return tz
+  }
+
+  return null
 }
 
 // --- Main Handler ---
@@ -301,6 +358,11 @@ Deno.serve(async (req) => {
           companySize: mapEmployeeCount(org?.estimated_num_employees as number | undefined),
           industry: (org?.industry as string) || '',
           location: [person.city, person.state, person.country].filter(Boolean).join(', '),
+          timezone: deriveTimezone(
+            (person.city as string) || '',
+            (person.state as string) || '',
+            (person.country as string) || ''
+          ),
           status: 'cold' as const,
           assignedTo: '',
           lastContactedAt: null,

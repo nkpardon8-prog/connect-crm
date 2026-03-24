@@ -335,6 +335,7 @@ export type Database = {
           sent_at: string
           sent_by: string
           sequence_id: string | null
+          smart_send: boolean
           status: string
           subject: string
           updated_at: string
@@ -354,6 +355,7 @@ export type Database = {
           sent_at?: string
           sent_by: string
           sequence_id?: string | null
+          smart_send?: boolean
           status?: string
           subject: string
           updated_at?: string
@@ -373,6 +375,7 @@ export type Database = {
           sent_at?: string
           sent_by?: string
           sequence_id?: string | null
+          smart_send?: boolean
           status?: string
           subject?: string
           updated_at?: string
@@ -649,6 +652,7 @@ export type Database = {
           linkedin_url: string | null
           email_status: string
           location: string
+          timezone: string | null
           notes: string
           phone: string
           status: string
@@ -671,6 +675,7 @@ export type Database = {
           linkedin_url?: string | null
           email_status?: string
           location?: string
+          timezone?: string | null
           notes?: string
           phone?: string
           status?: string
@@ -693,6 +698,7 @@ export type Database = {
           linkedin_url?: string | null
           email_status?: string
           location?: string
+          timezone?: string | null
           notes?: string
           phone?: string
           status?: string

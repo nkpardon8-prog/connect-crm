@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { ArrowLeft, ArrowRight, Send, Save, Eye, Users, FileText, FlaskConical, Zap } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Send, Save, Eye, Users, FileText, FlaskConical, Zap, Clock } from 'lucide-react';
 import AudienceSelector from '@/components/campaigns/AudienceSelector';
 import TemplateEditor from '@/components/campaigns/TemplateEditor';
 import SequenceEditor from '@/components/campaigns/SequenceEditor';
@@ -44,6 +44,7 @@ export default function CampaignBuilderPage() {
   const [abTestEnabled, setAbTestEnabled] = useState(false);
   const [variantBSubject, setVariantBSubject] = useState('');
   const [variantBBody, setVariantBBody] = useState('');
+  const [smartSend, setSmartSend] = useState(false);
 
   // Apollo auto-gen state
   const [showApolloGen, setShowApolloGen] = useState(false);
@@ -104,6 +105,7 @@ export default function CampaignBuilderPage() {
           variantBSubject: abTestEnabled ? variantBSubject.trim() : undefined,
           variantBBody: abTestEnabled ? variantBBody.trim() : undefined,
           sequenceId: sequenceId || undefined,
+          smartSend,
         });
         const recipients = Array.from(selectedLeadIds).map(leadId => {
           const lead = leads.find(l => l.id === leadId);
@@ -132,6 +134,7 @@ export default function CampaignBuilderPage() {
         abTestEnabled,
         variantBSubject: abTestEnabled ? variantBSubject.trim() : undefined,
         variantBBody: abTestEnabled ? variantBBody.trim() : undefined,
+        smartSend,
       });
 
       // Send emails
@@ -397,6 +400,17 @@ export default function CampaignBuilderPage() {
                 <p className="text-muted-foreground text-xs">From</p>
                 <p className="font-medium">{user?.sendingEmail || 'Not set'}</p>
               </div>
+            </div>
+            <div className="flex items-center gap-3 mb-4">
+              <Button
+                variant={smartSend ? 'default' : 'outline'}
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setSmartSend(!smartSend)}
+              >
+                <Clock className="h-3.5 w-3.5" /> {smartSend ? 'Smart Send On' : 'Optimize Send Time'}
+              </Button>
+              {smartSend && <span className="text-xs text-muted-foreground">Emails will send at 9 AM in each recipient's local timezone</span>}
             </div>
             <div className="flex items-center gap-3 mb-4">
               <Button variant={sendMode === 'now' ? 'default' : 'outline'} size="sm" onClick={() => setSendMode('now')}>

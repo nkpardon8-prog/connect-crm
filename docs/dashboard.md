@@ -70,6 +70,15 @@ Each card also shows a **% change indicator** (e.g., "+12%", "+8%") — these ar
 - **Hardcoded data:** Call count and email count per rep (8/12 for Marcus, 6/9 for Aisha)
 - Each row shows: avatar initials, name, lead count, calls badge, emails badge
 
+### Hottest Leads Leaderboard
+
+- Visible to all roles (admin and employee)
+- Ranks leads by `engagement_score` descending — score derived from campaign interactions (opens×1 + clicks×3 + replies×5)
+- Displays top 5 leads by default
+- Each row shows: lead name, company, engagement score badge, current status badge
+- Links to the lead detail page on row click
+- Empty state shown when no leads have a non-zero engagement score
+
 ---
 
 ## Component & Function Reference
@@ -140,3 +149,4 @@ const myDeals = isAdmin ? deals : deals.filter(d => d.assignedTo === user?.id);
 |------|--------|----------------|
 | 2026-03-22 | Initial documentation created | — |
 | 2026-03-23 | Data from Supabase via React Query hooks, leaderboard now fully dynamic | `DashboardPage.tsx` |
+| 2026-03-23 | "Hottest Leads" engagement leaderboard added — ranks leads by engagement score (opens×1 + clicks×3 + replies×5), visible to all roles | `DashboardPage.tsx` |

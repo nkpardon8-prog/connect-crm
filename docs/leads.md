@@ -3,7 +3,7 @@
 > Lead list table with search, filter, and bulk actions; lead detail view with contact info, AI suggestions, and activity timeline.
 
 **Status:** Active
-**Last Updated:** 2026-03-22
+**Last Updated:** 2026-03-23
 **Related Docs:** [OVERVIEW.md](./OVERVIEW.md) | [state-management.md](./state-management.md) | [data-model.md](./data-model.md) | [outreach.md](./outreach.md) | [pipeline.md](./pipeline.md)
 
 ---
@@ -36,6 +36,7 @@ Leads Management spans two pages: a searchable/filterable list view (`/leads`) a
 | Company | `company` + `companySize` employees | — |
 | Job Title | `jobTitle` | — |
 | Status | Badge with color | Color-coded: blue/amber/orange/red |
+| Engagement | Numeric score badge | `opens×1 + clicks×3 + replies×5`; hidden when score is 0 |
 | Phone | Phone button | Triggers `tel:` + logs activity |
 | Email | Email button | Triggers `mailto:` + logs activity |
 | Assigned Rep | User name | **Admin only** column |
@@ -97,6 +98,7 @@ Both actions use `event.stopPropagation()` to prevent row navigation.
 **Contact Info:**
 - Company + employee count (Building2 icon)
 - Location (MapPin icon)
+- Timezone (Globe icon) — shown when `timezone` is populated; sourced from Apollo import
 - Phone (clickable — triggers call action + activity logging)
 - Email (clickable — triggers email action + activity logging)
 - LinkedIn profile link (if `linkedinUrl` exists, external link)
@@ -233,3 +235,4 @@ const visibleLeads = useMemo(() => {
 | 2026-03-22 | Initial documentation created | — |
 | 2026-03-23 | Data from Supabase, role filtering via RLS, mockUsers replaced | `LeadsPage.tsx`, `LeadDetailPage.tsx` |
 | 2026-03-23 | Email status badge added to leads table (Verified/Guessed/Unverified/Invalid) | LeadsPage.tsx, LeadDetailPage.tsx |
+| 2026-03-23 | Engagement score badge added to leads table and detail page (opens×1 + clicks×3 + replies×5); `timezone` field added to lead contact card (sourced from Apollo import, used by Smart Send Timing) | LeadsPage.tsx, LeadDetailPage.tsx |

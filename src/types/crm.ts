@@ -30,6 +30,7 @@ export interface Lead {
   tags: string[];
   linkedinUrl?: string;
   emailStatus?: string;
+  timezone?: string;
 }
 
 export type ActivityType = 'call' | 'email_sent' | 'email_received' | 'note' | 'status_change' | 'meeting';
@@ -116,6 +117,7 @@ export interface Campaign {
   variantBBody?: string;
   abTestEnabled: boolean;
   sequenceId?: string;
+  smartSend?: boolean;
 }
 
 export interface CampaignEnrollment {

@@ -66,6 +66,8 @@ Central CRM entity.
 | tags | text[] | NOT NULL | '{}' |
 | linkedin_url | text | — | NULL |
 | email_status | text | NOT NULL | 'unverified' |
+| timezone | text | — | NULL |
+| engagement_score | integer | NOT NULL | 0 |
 | created_at | timestamptz | NOT NULL | now() |
 | updated_at | timestamptz | NOT NULL | now() (auto-updated) |
 | deleted_at | timestamptz | — | NULL (soft delete) |
@@ -167,6 +169,7 @@ Central CRM entity.
 | variant_b_body | text | — | NULL |
 | ab_test_enabled | boolean | NOT NULL | false |
 | sequence_id | uuid | FK → email_sequences(id) ON DELETE SET NULL | NULL |
+| smart_send | boolean | NOT NULL | false |
 | created_at | timestamptz | NOT NULL | now() |
 | updated_at | timestamptz | NOT NULL | now() (auto-updated) |
 | deleted_at | timestamptz | — | NULL (soft delete) |
@@ -520,3 +523,4 @@ The `process-campaigns` cron job is then registered as described in its Edge Fun
 | 2026-03-23 | Campaign Engine Phase 1a: new columns on campaigns (name, status, scheduled_at, drip_config, variant_b_subject, variant_b_body, ab_test_enabled, sequence_id), campaign_id FK on emails, new tables (unsubscribes, campaign_templates, campaign_sequences, campaign_steps), unsubscribe Edge Function | campaigns, emails, supabase/functions/ |
 | 2026-03-23 | Campaign Engine Phase 1b: generate-template Edge Function (GPT-4.1-mini via OpenRouter) for AI template generation and cleanup | supabase/functions/generate-template/ |
 | 2026-03-23 | Campaign Engine Phase 2a: campaign_enrollments table (per-recipient tracking), process-campaigns Edge Function, pg_cron scheduler setup | campaign_enrollments, supabase/functions/process-campaigns/ |
+| 2026-03-23 | Campaign Engine Phase 3b: `timezone` (text, nullable) and `engagement_score` (integer, default 0) added to leads; `smart_send` (boolean, default false) added to campaigns | leads, campaigns |

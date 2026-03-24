@@ -2,7 +2,7 @@
 
 > Campaign management dashboard with analytics, unsubscribe infrastructure, and template support.
 
-**Status:** Active (Phase 3a complete — Phase 3b pending)
+**Status:** Complete (all phases shipped)
 **Last Updated:** 2026-03-23
 **Related Docs:** [OVERVIEW.md](./OVERVIEW.md) | [outreach.md](./outreach.md) | [schema.md](./schema.md)
 
@@ -95,6 +95,21 @@ The campaign engine provides a full campaign management dashboard within the Out
 - Winner comparison view in CampaignDetailPage shows side-by-side variant performance
 - `ab_test_enabled`, `variant_b_subject`, `variant_b_body` columns on the `campaigns` table
 
+### Smart Send Timing
+- Campaigns with `smart_send` enabled deliver each email at 9 AM local time for the recipient's timezone
+- Timezone is sourced from the `timezone` column on the lead record (populated during Apollo import)
+- `process-campaigns` Edge Function uses the recipient's timezone offset to calculate the UTC send window
+- Recipients with no timezone value fall back to immediate delivery (standard behavior)
+- Controlled by the `smart_send` boolean column on the `campaigns` table
+- Toggle exposed in the Campaign Builder preview step
+
+### Lead Engagement Scoring
+- Each lead carries a computed `engagement_score` derived from campaign interaction history
+- Scoring formula: `opens × 1 + clicks × 3 + replies × 5`
+- Score is recalculated by the `process-campaigns` Edge Function after each delivery event and stored on the lead record
+- Badge displayed in the leads table and lead detail page showing the numeric score
+- Dashboard "Hottest Leads" leaderboard ranks leads by engagement score descending
+
 ### Apollo Auto-Gen Pipeline
 - Campaign builder includes an "Auto-Generate Audience from Apollo" option
 - Triggers an Apollo search directly from the campaign builder (keyword + filters)
@@ -118,7 +133,7 @@ The campaign engine provides a full campaign management dashboard within the Out
 ## Database Tables
 
 ### campaigns (expanded)
-New columns: `name`, `status` (draft/active/paused/completed), `scheduled_at`, `drip_config` (jsonb), `variant_b_subject`, `variant_b_body`, `ab_test_enabled`, `sequence_id`
+New columns: `name`, `status` (draft/active/paused/completed), `scheduled_at`, `drip_config` (jsonb), `variant_b_subject`, `variant_b_body`, `ab_test_enabled`, `sequence_id`, `smart_send` (boolean — enables timezone-based 9 AM local delivery)
 
 ### emails.campaign_id
 New FK column linking emails to campaigns for analytics queries.
@@ -155,7 +170,7 @@ Tracks unsubscribed leads. Token-based lookup. Indexed on lead_id and email.
 - **Phase 2a (complete):** Scheduled sends (date/time picker), pause/resume, per-recipient enrollment tracking, reply detection (auto-warm leads), pg_cron scheduler
 - **Phase 2b (complete):** Multi-step drip sequences (up to 5 steps), SequenceEditor, scheduler drip processing, stop conditions, sequence progress display
 - **Phase 3a (complete):** A/B testing (full body variants, 50/50 split, per-variant analytics, winner comparison), Apollo auto-gen pipeline from campaign builder with credit confirmation
-- **Phase 3b (pending):** Smart send timing, lead engagement scoring
+- **Phase 3b (complete):** Smart send timing (timezone-based 9 AM local delivery, `smart_send` column on campaigns, `timezone` on leads), lead engagement scoring (opens×1 + clicks×3 + replies×5, stored on lead, badge in leads table, Dashboard leaderboard)
 
 ---
 
@@ -168,3 +183,4 @@ Tracks unsubscribed leads. Token-based lookup. Indexed on lead_id and email.
 | 2026-03-23 | Phase 2a: scheduling, pause/resume, enrollment tracking, reply detection, pg_cron scheduler | process-campaigns, CampaignBuilderPage, CampaignDetailPage, CampaignList, email-events |
 | 2026-03-23 | Phase 2b: multi-step drip sequences, SequenceEditor, scheduler drip processing, stop conditions, sequence progress display | SequenceEditor, CampaignBuilderPage, process-campaigns, CampaignDetailPage |
 | 2026-03-23 | Phase 3a: A/B testing (full body variants, 50/50 split, per-variant analytics, winner comparison), Apollo auto-gen pipeline with credit confirmation | CampaignBuilderPage, CampaignDetailPage, CampaignAnalytics, send-email |
+| 2026-03-23 | Phase 3b: Smart send timing (9 AM local via lead timezone, smart_send column on campaigns), lead engagement scoring (opens×1 + clicks×3 + replies×5, badge in leads table, Dashboard leaderboard) | process-campaigns, CampaignBuilderPage, LeadsPage, LeadDetailPage, DashboardPage |

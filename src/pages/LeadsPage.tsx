@@ -4,6 +4,7 @@ import { useLeads } from '@/hooks/use-leads';
 import { useActivities } from '@/hooks/use-activities';
 import { useProfiles } from '@/hooks/use-profiles';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEngagement } from '@/hooks/use-engagement';
 import type { LeadStatus } from '@/types/crm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, Phone, Mail, Filter } from 'lucide-react';
+import { Search, Phone, Mail, Filter, Flame } from 'lucide-react';
 
 const statusConfig: Record<LeadStatus, { label: string; className: string }> = {
   cold: { label: 'Cold', className: 'bg-blue-100 text-blue-700 border-blue-200' },
@@ -26,6 +27,8 @@ export default function LeadsPage() {
   const { addActivity } = useActivities();
   const { profiles } = useProfiles();
   const { user, isAdmin } = useAuth();
+  const { topLeads } = useEngagement(100);
+  const engagementMap = new Map(topLeads.map(e => [e.leadId, e.score]));
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -167,6 +170,7 @@ export default function LeadsPage() {
                 <TableHead>Phone</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Email Status</TableHead>
+                <TableHead className="text-xs">Engagement</TableHead>
                 {isAdmin && <TableHead>Assigned</TableHead>}
                 <TableHead>Last Contact</TableHead>
               </TableRow>
@@ -203,6 +207,13 @@ export default function LeadsPage() {
                     </button>
                   </TableCell>
                   <TableCell className="text-xs">{emailStatusBadge(lead.emailStatus)}</TableCell>
+                  <TableCell className="text-xs">
+                    {engagementMap.get(lead.id) ? (
+                      <Badge variant="secondary" className="text-[10px] bg-orange-50 text-orange-700 gap-0.5">
+                        <Flame className="h-2.5 w-2.5" /> {engagementMap.get(lead.id)}
+                      </Badge>
+                    ) : null}
+                  </TableCell>
                   {isAdmin && <TableCell className="text-sm">{getRepName(lead.assignedTo)}</TableCell>}
                   <TableCell className="text-sm text-muted-foreground">
                     {lead.lastContactedAt ? new Date(lead.lastContactedAt).toLocaleDateString() : 'Never'}

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Users, Phone, Mail, TrendingUp, DollarSign, ArrowUpRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts';
+import EngagementLeaderboard from '@/components/campaigns/EngagementLeaderboard';
 
 const statusColors: Record<string, string> = {
   cold: 'hsl(217.2 91.2% 59.8%)',
@@ -169,6 +170,9 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Engagement leaderboard */}
+      <EngagementLeaderboard />
 
       {/* Leaderboard (admin only) */}
       {isAdmin && (

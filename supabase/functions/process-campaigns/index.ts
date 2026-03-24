@@ -1,6 +1,20 @@
 import { corsHeaders } from '../_shared/cors.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+function calculateOptimalSendTime(timezone: string | null): Date | null {
+  if (!timezone) return null
+  try {
+    const now = new Date()
+    const formatter = new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: 'numeric', hour12: false })
+    const localHour = parseInt(formatter.format(now))
+    const targetHour = 9
+    let hoursUntilTarget = targetHour - localHour
+    if (hoursUntilTarget <= 0) hoursUntilTarget += 24
+    if (hoursUntilTarget < 1) return null // Close enough, send now
+    return new Date(now.getTime() + hoursUntilTarget * 60 * 60 * 1000)
+  } catch { return null }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -47,13 +61,14 @@ Deno.serve(async (req) => {
 
     for (const campaign of uniqueCampaigns) {
       // Get pending enrollments
-      const { data: enrollments } = await supabaseAdmin
+      const { data: enrollmentsData } = await supabaseAdmin
         .from('campaign_enrollments')
         .select('*')
         .eq('campaign_id', campaign.id)
         .eq('status', 'pending')
         .is('next_send_at', null)
         .limit(100) // Process in chunks to avoid timeout
+      let enrollments = enrollmentsData
 
       if (!enrollments?.length) {
         // No pending enrollments — mark completed
@@ -78,12 +93,34 @@ Deno.serve(async (req) => {
       // Bulk-fetch lead data for merge fields
       const leadIds = enrollments.map(e => e.lead_id).filter(Boolean)
       const { data: leadsData } = await supabaseAdmin.from('leads')
-        .select('id, first_name, company')
+        .select('id, first_name, company, timezone')
         .in('id', leadIds)
 
-      const leadMap = new Map<string, { first_name: string; company: string }>()
+      const leadMap = new Map<string, { first_name: string; company: string; timezone: string | null }>()
       for (const l of leadsData || []) {
-        leadMap.set(l.id, { first_name: l.first_name, company: l.company })
+        leadMap.set(l.id, { first_name: l.first_name, company: l.company, timezone: l.timezone ?? null })
+      }
+
+      // Smart send: defer enrollments where it's not 9 AM local yet
+      if (campaign.smart_send) {
+        const deferredIds: string[] = []
+        for (const e of enrollments || []) {
+          if (e.lead_id) {
+            const lead = leadMap.get(e.lead_id)
+            if (lead?.timezone) {
+              const optimalTime = calculateOptimalSendTime(lead.timezone)
+              if (optimalTime && optimalTime > new Date()) {
+                deferredIds.push(e.id)
+                await supabaseAdmin.from('campaign_enrollments')
+                  .update({ next_send_at: optimalTime.toISOString() })
+                  .eq('id', e.id)
+              }
+            }
+          }
+        }
+        // Remove deferred enrollments from the batch
+        enrollments = (enrollments || []).filter(e => !deferredIds.includes(e.id))
+        if (enrollments.length === 0) continue // All deferred, skip this campaign for now
       }
 
       // Build email batch
