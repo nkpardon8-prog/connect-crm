@@ -1,5 +1,6 @@
 import { corsHeaders } from '../_shared/cors.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { writeAlert } from '../_shared/alerts.ts'
 
 // ---- Helper functions (copied from apollo-search) ----
 
@@ -88,7 +89,17 @@ async function runApolloSearch(
     body: JSON.stringify(searchBody),
   })
 
-  if (!searchRes.ok) return { leads: [], totalFound: 0, creditsUsed: 0, skippedDuplicates: 0 }
+  if (!searchRes.ok) {
+    if (supabaseAdmin) {
+      await writeAlert(supabaseAdmin, {
+        type: 'error',
+        source: 'apollo',
+        message: `Apollo search failed (HTTP ${searchRes.status}). Lead search is temporarily unavailable.`,
+        details: { status: searchRes.status },
+      })
+    }
+    return { leads: [], totalFound: 0, creditsUsed: 0, skippedDuplicates: 0 }
+  }
 
   const searchData = await searchRes.json()
   const people = searchData.people || []
@@ -168,7 +179,17 @@ async function runApolloSearch(
         webhook_url: `${SITE_URL}/functions/v1/apollo-phone-webhook`,
       }),
     })
-    if (!enrichRes.ok) continue
+    if (!enrichRes.ok) {
+      if (supabaseAdmin) {
+        await writeAlert(supabaseAdmin, {
+          type: 'warning',
+          source: 'apollo',
+          message: `Apollo enrichment batch failed (HTTP ${enrichRes.status}). Some contacts may be missing data.`,
+          details: { status: enrichRes.status },
+        })
+      }
+      continue
+    }
     const enrichData = await enrichRes.json()
     enriched.push(...(enrichData.matches || []))
     if (i + 10 < ids.length) await new Promise(r => setTimeout(r, 200))
@@ -315,6 +336,8 @@ Deno.serve(async (req) => {
     const { message, chatHistory, perPage, requirePhone } = await req.json()
     const phoneFilter = requirePhone === true
 
+    const supabaseAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+
     const systemPrompt = `You are an intelligent lead generation assistant for IntegrateAPI CRM. You help users find business contacts via Apollo.io.
 
 CRITICAL RULES:
@@ -430,6 +453,12 @@ The user has ${phoneFilter ? 'ENABLED' : 'DISABLED'} the "Require phone" filter.
     if (!llmRes.ok) {
       const err = await llmRes.text()
       console.error('LLM error:', llmRes.status, err)
+      await writeAlert(supabaseAdmin, {
+        type: 'error',
+        source: 'openrouter',
+        message: `Lead generator AI failed (HTTP ${llmRes.status}). The conversational assistant is temporarily unavailable.`,
+        details: { status: llmRes.status, error: err },
+      })
       return new Response(JSON.stringify({ error: 'AI conversation failed' }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
@@ -445,9 +474,6 @@ The user has ${phoneFilter ? 'ENABLED' : 'DISABLED'} the "Require phone" filter.
     // If LLM says to search, run Apollo pipeline inline
     if (parsed.shouldSearch) {
       console.log('Running Apollo search with filters:', JSON.stringify(parsed.filters))
-
-      // Create supabaseAdmin before search so it can be used for dedup
-      const supabaseAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
       const searchResults = await runApolloSearch(
         parsed.filters,

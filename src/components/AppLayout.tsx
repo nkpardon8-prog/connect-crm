@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
 import { useAuth } from '@/contexts/AuthContext';
+import { AlertBanner } from '@/components/AlertBanner';
 
 export default function AppLayout() {
   const { user } = useAuth();
@@ -19,6 +20,7 @@ export default function AppLayout() {
               </div>
             </div>
           </header>
+          <AlertBanner />
           <main className="flex-1 overflow-auto">
             <Outlet />
           </main>

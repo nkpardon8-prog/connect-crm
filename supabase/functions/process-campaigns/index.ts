@@ -1,5 +1,6 @@
 import { corsHeaders } from '../_shared/cors.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { writeAlert } from '../_shared/alerts.ts'
 
 function applyMergeFields(text: string, data: {
   first_name?: string; last_name?: string; company?: string;
@@ -254,7 +255,19 @@ Deno.serve(async (req) => {
               .in('id', variantBIds)
           }
         } else {
-          console.error('Resend batch failed:', res.status, await res.text())
+          const error = await res.text()
+          const status = res.status
+          console.error('Resend batch failed:', status, error)
+          await writeAlert(supabaseAdmin, {
+            type: 'error',
+            source: 'resend',
+            message: `Campaign email batch failed (HTTP ${status}). Some emails may not have been sent.`,
+            details: { campaign_id: campaign.id, status, error },
+          })
+          await supabaseAdmin.from('campaign_enrollments')
+            .update({ status: 'failed' })
+            .in('id', enrollments.slice(i, i + 100).map(e => e.id))
+          continue
         }
 
         if (i + 100 < resendEmails.length) await new Promise(r => setTimeout(r, 250))
@@ -410,7 +423,19 @@ Deno.serve(async (req) => {
 
         dripProcessed++
       } else {
-        console.error('Drip send failed:', res.status, await res.text())
+        const error = await res.text()
+        const status = res.status
+        console.error('Drip send failed:', status, error)
+        await writeAlert(supabaseAdmin, {
+          type: 'error',
+          source: 'resend',
+          message: `Drip sequence email failed (HTTP ${status}).`,
+          details: { enrollment_id: enrollment.id, campaign_id: enrollment.campaign_id, status, error },
+        })
+        await supabaseAdmin.from('campaign_enrollments')
+          .update({ status: 'failed' })
+          .eq('id', enrollment.id)
+        continue
       }
     }
 

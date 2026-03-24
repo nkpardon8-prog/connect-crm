@@ -1,5 +1,6 @@
 import { corsHeaders } from '../_shared/cors.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { writeAlert } from '../_shared/alerts.ts'
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -116,6 +117,11 @@ Deno.serve(async (req) => {
       if (!resendRes.ok) {
         const err = await resendRes.json()
         console.error('Resend send failed:', err)
+        await writeAlert(supabaseAdmin, {
+          type: 'error', source: 'resend',
+          message: `Email send failed (HTTP ${resendRes.status}). The email was not delivered.`,
+          details: { status: resendRes.status, to: email.to, error: err },
+        })
         return new Response(
           JSON.stringify({ error: err.message || 'Failed to send email' }),
           { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -174,7 +180,13 @@ Deno.serve(async (req) => {
         })
 
         if (!resendRes.ok) {
-          console.error('Resend batch failed:', resendRes.status, await resendRes.text())
+          const batchError = await resendRes.text()
+          console.error('Resend batch failed:', resendRes.status, batchError)
+          await writeAlert(supabaseAdmin, {
+            type: 'error', source: 'resend',
+            message: `Email batch send partially failed (HTTP ${resendRes.status}). Some emails were not delivered.`,
+            details: { status: resendRes.status, batchSize: chunk.length },
+          })
           failedCount += chunk.length
           continue
         }

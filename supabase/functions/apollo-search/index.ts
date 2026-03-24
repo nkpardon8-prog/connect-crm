@@ -1,5 +1,6 @@
 import { corsHeaders } from '../_shared/cors.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { writeAlert } from '../_shared/alerts.ts'
 
 // --- Types ---
 
@@ -56,7 +57,7 @@ function scoreLead(lead: LeadResult): number {
   return score
 }
 
-async function parsePromptWithLLM(prompt: string, apiKey: string): Promise<ApolloFilters> {
+async function parsePromptWithLLM(prompt: string, apiKey: string, supabaseAdmin: ReturnType<typeof createClient>): Promise<ApolloFilters> {
   const systemPrompt = `You are a search filter extraction assistant. Given a natural language description of an ideal customer profile, extract structured search filters for the Apollo.io People Search API.
 
 AVAILABLE FILTERS:
@@ -113,6 +114,11 @@ RULES:
   if (!response.ok) {
     const errorBody = await response.text()
     console.error('OpenRouter LLM error:', response.status, errorBody)
+    await writeAlert(supabaseAdmin, {
+      type: 'error', source: 'openrouter',
+      message: `Apollo search AI parsing failed (HTTP ${response.status}).`,
+      details: { status: response.status, error: errorBody },
+    })
     throw new Error(`LLM parsing failed (${response.status})`)
   }
 
@@ -210,9 +216,11 @@ Deno.serve(async (req) => {
       )
     }
 
+    const supabaseAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+
     // Step 1: LLM parsing — extract Apollo filters from natural language
     console.log('Step 1: Parsing prompt with LLM...')
-    const filters = await parsePromptWithLLM(prompt, OPENROUTER_API_KEY)
+    const filters = await parsePromptWithLLM(prompt, OPENROUTER_API_KEY, supabaseAdmin)
     console.log('Filters extracted:', JSON.stringify(filters))
 
     // Step 2: Apollo People Search (0 credits)
@@ -237,6 +245,11 @@ Deno.serve(async (req) => {
     if (!searchRes.ok) {
       const searchError = await searchRes.text()
       console.error('Apollo search error:', searchRes.status, searchError)
+      await writeAlert(supabaseAdmin, {
+        type: 'error', source: 'apollo',
+        message: `Apollo search failed (HTTP ${searchRes.status}). Lead search is temporarily unavailable.`,
+        details: { status: searchRes.status, error: searchError },
+      })
       return new Response(
         JSON.stringify({ error: `Apollo search failed (${searchRes.status})` }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -279,6 +292,11 @@ Deno.serve(async (req) => {
 
       if (!enrichRes.ok) {
         console.error('Apollo enrichment batch failed:', enrichRes.status, await enrichRes.text())
+        await writeAlert(supabaseAdmin, {
+          type: 'warning', source: 'apollo',
+          message: `Apollo enrichment batch failed (HTTP ${enrichRes.status}). Some contacts may be missing data.`,
+          details: { status: enrichRes.status },
+        })
         continue // Skip failed batch, don't crash the whole request
       }
 
@@ -389,10 +407,6 @@ Deno.serve(async (req) => {
 
     // Step 6: Log usage
     try {
-      const supabaseAdmin = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-      )
       const jwt = authHeader.replace('Bearer ', '')
       const { data: { user } } = await supabaseAdmin.auth.getUser(jwt)
 

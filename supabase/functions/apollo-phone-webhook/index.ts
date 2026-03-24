@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { writeAlert } from '../_shared/alerts.ts'
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
@@ -43,6 +44,11 @@ Deno.serve(async (req) => {
 
       if (bufferError) {
         console.error(`Failed to buffer phone for apollo_id ${apolloId}:`, bufferError)
+        await writeAlert(supabaseAdmin, {
+          type: 'warning', source: 'system',
+          message: 'Phone number buffer write failed. Some phone data may be lost.',
+          details: { apollo_id: apolloId, error: bufferError.message },
+        })
       } else {
         buffered++
         console.log(`Buffered phone for apollo_id ${apolloId}`)

@@ -1,9 +1,13 @@
 import { corsHeaders } from '../_shared/cors.ts'
+import { writeAlert } from '../_shared/alerts.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
+    const supabaseAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+
     const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY')
     if (!OPENROUTER_API_KEY) {
       return new Response(JSON.stringify({ error: 'API key not configured' }),
@@ -112,6 +116,11 @@ Return a JSON object with "subject" and "body" fields.`
     if (!response.ok) {
       const errorBody = await response.text()
       console.error('OpenRouter error:', response.status, errorBody)
+      await writeAlert(supabaseAdmin, {
+        type: 'error', source: 'openrouter',
+        message: `AI template generation failed (HTTP ${response.status}).`,
+        details: { status: response.status, error: errorBody },
+      })
       return new Response(JSON.stringify({ error: 'AI generation failed' }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }

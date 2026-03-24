@@ -818,6 +818,12 @@ export type Database = {
         }
         Relationships: []
       }
+      system_alerts: {
+        Row: { id: string; type: string; source: string; message: string; details: Record<string, unknown>; resolved: boolean; created_at: string }
+        Insert: { id?: string; type: string; source: string; message: string; details?: Record<string, unknown>; resolved?: boolean; created_at?: string }
+        Update: { type?: string; source?: string; message?: string; details?: Record<string, unknown>; resolved?: boolean }
+        Relationships: []
+      }
       sequence_steps: {
         Row: {
           body: string

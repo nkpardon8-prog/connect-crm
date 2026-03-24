@@ -126,7 +126,7 @@ export interface CampaignEnrollment {
   campaignId: string;
   leadId?: string;
   email: string;
-  status: 'pending' | 'sent' | 'opened' | 'replied' | 'bounced' | 'unsubscribed';
+  status: 'pending' | 'sent' | 'opened' | 'replied' | 'bounced' | 'unsubscribed' | 'failed';
   sentAt?: string;
   nextSendAt?: string;
   currentStep: number;

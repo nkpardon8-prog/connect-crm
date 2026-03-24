@@ -1,4 +1,6 @@
 import { corsHeaders } from '../_shared/cors.ts'
+import { writeAlert } from '../_shared/alerts.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 interface LeadSummary {
   id: string
@@ -52,6 +54,8 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const supabaseAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+
     const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY')
     if (!OPENROUTER_API_KEY) {
       return new Response(
@@ -110,6 +114,11 @@ Deno.serve(async (req) => {
     if (!response.ok) {
       const errorBody = await response.text()
       console.error('OpenRouter error:', response.status, errorBody)
+      await writeAlert(supabaseAdmin, {
+        type: 'error', source: 'openrouter',
+        message: `Campaign AI targeting failed (HTTP ${response.status}).`,
+        details: { status: response.status, error: errorBody },
+      })
       return new Response(
         JSON.stringify({ error: `LLM request failed (${response.status})` }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -126,6 +135,8 @@ Deno.serve(async (req) => {
     }
 
     const content = JSON.parse(data.choices[0].message.content)
+
+    if (data?.error) throw new Error(data.error)
 
     return new Response(JSON.stringify(content), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
