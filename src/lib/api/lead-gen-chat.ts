@@ -14,9 +14,10 @@ export async function sendLeadGenMessage(
   message: string,
   chatHistory: { role: 'user' | 'assistant'; content: string }[],
   perPage?: number,
+  requirePhone?: boolean,
 ): Promise<LeadGenChatResponse> {
   const { data, error } = await supabase.functions.invoke('lead-gen-chat', {
-    body: { message, chatHistory, perPage },
+    body: { message, chatHistory, perPage, requirePhone },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);

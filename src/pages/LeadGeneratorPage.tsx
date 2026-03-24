@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Sparkles, Send, Bot, User as UserIcon, Import, Mail, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -34,6 +35,7 @@ export default function LeadGeneratorPage() {
   const [loading, setLoading] = useState(false);
   const [importedSets, setImportedSets] = useState<Set<number>>(new Set());
   const [selectedCount, setSelectedCount] = useState(25);
+  const [requirePhone, setRequirePhone] = useState(false);
   const [historyIds, setHistoryIds] = useState<Map<number, string>>(new Map());
 
   useEffect(() => {
@@ -99,7 +101,7 @@ export default function LeadGeneratorPage() {
           content: m.content,
         }));
 
-      const result = await sendLeadGenMessage(text, chatHistory, selectedCount);
+      const result = await sendLeadGenMessage(text, chatHistory, selectedCount, requirePhone);
 
       const botMsg: ChatMessage = {
         role: 'bot',
@@ -305,6 +307,16 @@ export default function LeadGeneratorPage() {
               onChange={e => setInput(e.target.value)}
               className="flex-1"
             />
+            <div className="flex items-center gap-1.5">
+              <Switch
+                id="require-phone"
+                checked={requirePhone}
+                onCheckedChange={setRequirePhone}
+              />
+              <label htmlFor="require-phone" className="text-xs text-muted-foreground whitespace-nowrap cursor-pointer">
+                <Phone className="h-3 w-3 inline mr-0.5" />Phone
+              </label>
+            </div>
             <Select value={String(selectedCount)} onValueChange={v => setSelectedCount(Number(v))}>
               <SelectTrigger className="w-[80px]">
                 <SelectValue />

@@ -65,9 +65,11 @@ async function runApolloSearch(
   apolloApiKey: string,
   zeroBounceApiKey: string | undefined,
   supabaseAdmin?: ReturnType<typeof createClient>,
+  requirePhone = false,
 ) {
   // Step 1: Apollo People Search (0 credits)
-  const searchBody: Record<string, unknown> = { per_page: Math.min(perPage, 100), page: 1 }
+  const searchPerPage = requirePhone ? Math.min((perPage || 25) * 3, 100) : Math.min(perPage, 100)
+  const searchBody: Record<string, unknown> = { per_page: searchPerPage, page: 1 }
   const titles = filters.person_titles as string[]
   const locations = filters.person_locations as string[]
   const empRanges = filters.organization_num_employees_ranges as string[]
@@ -94,8 +96,39 @@ async function runApolloSearch(
 
   if (people.length === 0) return { leads: [], totalFound: 0, creditsUsed: 0, skippedDuplicates: 0 }
 
+  // Phone filter: only keep people with confirmed phone numbers
+  let filteredPeople = people
+  if (requirePhone) {
+    filteredPeople = people.filter((p: { has_direct_phone?: string }) => p.has_direct_phone === 'Yes')
+    console.log(`Phone filter: ${filteredPeople.length} of ${people.length} have confirmed phones`)
+
+    // Fallback: paginate if not enough phone-qualified results
+    if (filteredPeople.length < perPage) {
+      let page = 2
+      const maxPages = 4
+      while (filteredPeople.length < perPage && page <= maxPages) {
+        const moreRes = await fetch('https://api.apollo.io/api/v1/mixed_people/api_search', {
+          method: 'POST',
+          headers: { 'X-Api-Key': apolloApiKey, 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+          body: JSON.stringify({ ...searchBody, per_page: 50, page }),
+        })
+        if (!moreRes.ok) break
+        const moreData = await moreRes.json()
+        const morePeople = moreData.people || []
+        if (morePeople.length === 0) break
+        filteredPeople.push(...morePeople.filter((p: { has_direct_phone?: string }) => p.has_direct_phone === 'Yes'))
+        page++
+      }
+      filteredPeople = filteredPeople.slice(0, perPage)
+    }
+
+    if (filteredPeople.length === 0) {
+      return { leads: [], totalFound, creditsUsed: 0, skippedDuplicates: 0 }
+    }
+  }
+
   // Pre-enrichment dedup: check which Apollo person IDs already exist in CRM
-  const apolloPersonIds = people.map((p: { id: string }) => p.id)
+  const apolloPersonIds = filteredPeople.map((p: { id: string }) => p.id)
   let existingApolloIds = new Set<string>()
 
   if (supabaseAdmin && apolloPersonIds.length > 0) {
@@ -106,12 +139,12 @@ async function runApolloSearch(
       .not('apollo_id', 'is', null)
 
     existingApolloIds = new Set((existingByApolloId || []).map((r: { apollo_id: string }) => r.apollo_id))
-    console.log(`Dedup: ${existingApolloIds.size} of ${people.length} already in CRM by apollo_id`)
+    console.log(`Dedup: ${existingApolloIds.size} of ${filteredPeople.length} already in CRM by apollo_id`)
   }
 
   // Only enrich people NOT already in CRM
-  const newPeople = people.filter((p: { id: string }) => !existingApolloIds.has(p.id))
-  const skippedCount = people.length - newPeople.length
+  const newPeople = filteredPeople.filter((p: { id: string }) => !existingApolloIds.has(p.id))
+  const skippedCount = filteredPeople.length - newPeople.length
 
   if (newPeople.length === 0) {
     return { leads: [], totalFound, creditsUsed: 0, skippedDuplicates: skippedCount }
@@ -253,7 +286,8 @@ Deno.serve(async (req) => {
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    const { message, chatHistory, perPage } = await req.json()
+    const { message, chatHistory, perPage, requirePhone } = await req.json()
+    const phoneFilter = requirePhone === true
 
     const systemPrompt = `You are an intelligent lead generation assistant for IntegrateAPI CRM. You help users find business contacts via Apollo.io.
 
@@ -299,7 +333,10 @@ FILTER RULES:
 - organization_num_employees_ranges: "1-10","11-50","51-200","201-500","501-1000","1001-5000","5001-10000","10001+"
 - q_keywords: industry/topic terms
 - person_seniorities: "c_suite","founder","owner","partner","vp","director","manager","senior","entry"
-- Always return filters as an object with arrays (never null). Use shouldSearch to indicate if they're actionable.`
+- Always return filters as an object with arrays (never null). Use shouldSearch to indicate if they're actionable.
+
+PHONE FILTER:
+The user has ${phoneFilter ? 'ENABLED' : 'DISABLED'} the "Require phone" filter.${phoneFilter ? '\nWhen confirming a search, mention that results will only include contacts with verified phone numbers on file. Adjust your credit estimate — not all search results will have phones, so actual enrichment count may be lower than requested.' : ''}`
 
     const llmMessages = [
       { role: 'system', content: systemPrompt },
@@ -392,6 +429,7 @@ FILTER RULES:
         APOLLO_API_KEY,
         ZEROBOUNCE_API_KEY,
         supabaseAdmin,
+        phoneFilter,
       )
 
       // Log usage
