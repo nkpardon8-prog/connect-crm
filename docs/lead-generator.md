@@ -10,7 +10,7 @@
 
 ## Overview
 
-The Lead Generator (`/generator`) provides a chat-style interface where users describe their ideal customer profile. A Supabase Edge Function parses the prompt using DeepSeek V3.2 (via OpenRouter), searches Apollo.io's People Search API, bulk-enriches results for verified contact info, scores leads by contact quality, and returns filtered results. Users can import discovered leads into the CRM.
+The Lead Generator (`/generator`) provides a conversational chat interface where users describe their ideal customer profile. A GPT-4.1-mini conversation layer (via the `lead-gen-chat` Edge Function) manages the dialog: it confirms the intended search with the user before running it, handles zero-result responses with refinement suggestions, and renders clickable action buttons directly in bot messages. Once confirmed, the full Apollo search pipeline (previously in `apollo-search`) runs inline within `lead-gen-chat` — parsing the prompt, searching Apollo.io's People Search API, bulk-enriching results, and scoring leads by contact quality. Users can import discovered leads into the CRM. The previous `AlertDialog` confirmation modal has been replaced by in-chat confirmation.
 
 ---
 
@@ -18,10 +18,12 @@ The Lead Generator (`/generator`) provides a chat-style interface where users de
 
 | File | Purpose |
 |------|---------|
-| `src/pages/LeadGeneratorPage.tsx` | Entire feature — chat UI, Apollo search, import logic, search history restore |
-| `supabase/functions/apollo-search/index.ts` | Edge Function — LLM prompt parsing, Apollo search + enrichment, credit tracking |
+| `src/pages/LeadGeneratorPage.tsx` | Entire feature — conversational chat UI, import logic, search history restore, action buttons |
+| `supabase/functions/lead-gen-chat/index.ts` | Edge Function — GPT-4.1-mini conversation manager: confirms before searching, suggests refinements on zero results, handles dialog turns; Apollo search pipeline inlined here |
+| `supabase/functions/apollo-search/index.ts` | Edge Function — LLM prompt parsing, Apollo search + enrichment, credit tracking (standalone, also called by lead-gen-chat) |
 | `supabase/functions/apollo-phone-webhook/index.ts` | Edge Function — receives async phone reveal webhooks from Apollo, matches lead by apolloId, updates phone field |
 | `src/lib/api/apollo.ts` | Frontend API client — invokes apollo-search Edge Function, maps results |
+| `src/lib/api/lead-gen-chat.ts` | Frontend API client — invokes lead-gen-chat Edge Function, maps conversation responses |
 | `src/lib/api/search-history.ts` | API client — reads and writes rows to `lead_search_history` |
 
 ---
@@ -40,42 +42,54 @@ The Lead Generator (`/generator`) provides a chat-style interface where users de
 
 3. User message appears in chat (right-aligned, primary bg)
 
-4. Confirmation dialog shown — summarises the search about to run,
-   user confirms to proceed
+4. lead-gen-chat Edge Function called — GPT-4.1-mini receives the
+   message and the full conversation history. The model responds with
+   a confirmation summary of the intended search and asks the user to
+   confirm or refine. Bot message rendered with clickable action
+   buttons (e.g. "Yes, search now", "Refine criteria").
 
-5. Loading state shown: "Searching Apollo.io for matching contacts..."
-   while the Edge Function runs
+5. User clicks an action button or types a reply to confirm or adjust.
+   No AlertDialog is shown — confirmation happens entirely in the chat.
 
-6. Edge Function pipeline:
-   a. LLM (DeepSeek V3.2 via OpenRouter) parses the prompt into
-      structured Apollo filters (title, industry, company size,
+6. Once confirmed, loading state shown:
+   "Searching Apollo.io for matching contacts..."
+   while the Apollo pipeline runs inside lead-gen-chat.
+
+7. Apollo search pipeline (inlined in lead-gen-chat):
+   a. LLM (GPT-4.1-mini via OpenRouter) parses the confirmed prompt
+      into structured Apollo filters (title, industry, company size,
       location, keywords)
    b. Apollo People Search API called with extracted filters
    c. Bulk enrichment run on returned contacts for verified emails
       and phone numbers
    d. Results scored by contact quality (verified email, phone
       availability, profile completeness)
-   e. Filtered and ranked results returned to frontend (max 50)
+   e. Filtered and ranked results returned (max 50)
 
-7. Bot responds with:
-   - Text: "Found N contacts matching your criteria. Here's the list:"
-   - Table: Name, Title, Company, Location, Email, Contact Score
-   - Import button: "Import N as Cold Leads"
-   - Search results are immediately persisted to `lead_search_history` in Supabase
-     on return from Apollo — before the user takes any action
+8a. Results found — Bot responds with:
+    - Text: "Found N contacts matching your criteria. Here's the list:"
+    - Table: Name, Title, Company, Location, Email, Contact Score
+    - Import button: "Import N as Cold Leads"
+    - Search results are immediately persisted to `lead_search_history`
+      in Supabase before the user takes any action
 
-8. User clicks "Import N as Cold Leads"
+8b. Zero results — GPT-4.1-mini generates a bot message explaining why
+    no results were found and suggests 2–3 refinements as clickable
+    action buttons (e.g. "Broaden to 10–500 employees",
+    "Remove location filter").
+
+9. User clicks "Import N as Cold Leads"
    → Leads assigned to current user
    → Persisted to Supabase via addLeads() mutation
    → Button changes to "Imported to CRM" (disabled)
    → The corresponding `lead_search_history` row is marked imported
 
-9. User can continue chatting to generate more batches
+10. User can continue chatting to generate more batches
 
-10. On page navigation away and back, the full chat history is restored from
-    `lead_search_history`. Un-imported result sets are restored with their
-    "Import N as Cold Leads" button still active — results remain importable
-    across navigations.
+11. On page navigation away and back, the full chat history is restored
+    from `lead_search_history`. Un-imported result sets are restored
+    with their "Import N as Cold Leads" button still active — results
+    remain importable across navigations.
 ```
 
 ### Chat Message Types
@@ -94,9 +108,9 @@ interface ChatMessage {
 
 ### Apollo Search & Enrichment
 
-The Edge Function (`apollo-search`) handles the full pipeline server-side:
+The Apollo search pipeline now runs server-side inside the `lead-gen-chat` Edge Function (previously in `apollo-search`). `apollo-search` still exists as a standalone function. The pipeline steps are:
 
-1. **LLM parsing** — DeepSeek V3.2 extracts structured filters from the free-text prompt: job title keywords, seniority level, industries, company size range, and location.
+1. **LLM parsing** — GPT-4.1-mini extracts structured filters from the confirmed prompt: job title keywords, seniority level, industries, company size range, and location.
 2. **Apollo People Search** — Filters passed to Apollo's `/mixed_people/search` endpoint. Up to 50 contacts returned.
 3. **Bulk enrichment** — Apollo's `/people/bulk_match` called on the search results to surface verified emails. The request is sent with `reveal_phone_number=true` so Apollo triggers an async phone reveal via webhook rather than returning the number inline.
 4. **Contact scoring** — Each result scored 0–100 based on: verified email present (+40), phone present (+30), LinkedIn URL (+15), complete name (+15).
@@ -157,7 +171,8 @@ const handleImport = (leads: Lead[], msgIndex: number) => {
 | `importedSets` | `Set<number>` | Message indices that have been imported |
 
 **Functions:**
-- `handleSend()` — adds user message, shows confirmation dialog, invokes Edge Function, persists results to `lead_search_history`, adds bot response
+- `handleSend()` — adds user message, calls `lead-gen-chat` Edge Function with full conversation history, renders bot response (may include action buttons or a leads table), persists results to `lead_search_history` when a search completes
+- `handleActionButton(action)` — injects the action label as a user message and calls `handleSend()`, used by clickable suggestion buttons in bot messages
 - `handleImport(leads, msgIndex)` — assigns leads to user, adds to CRM, marks search history row as imported, marks message as imported
 
 **On mount:** Loads prior search history rows for the current user from `lead_search_history`, ordered by `created_at` ascending, and reconstructs the chat message list. Un-imported rows restore with an active import button.
@@ -166,7 +181,8 @@ const handleImport = (leads: Lead[], msgIndex: number) => {
 - `addLeads(leads)` — persists imported leads to Supabase
 
 ### API Clients Used
-- `src/lib/api/apollo.ts` — `searchLeadsViaApollo(prompt)` — calls the `apollo-search` Edge Function and maps results to `Lead[]`
+- `src/lib/api/lead-gen-chat.ts` — `sendChatMessage(messages)` — calls the `lead-gen-chat` Edge Function with the full conversation history, returns a bot response that may carry leads, action buttons, or plain text
+- `src/lib/api/apollo.ts` — `searchLeadsViaApollo(prompt)` — calls the `apollo-search` Edge Function directly (used for non-conversational or legacy search paths)
 - `src/lib/api/search-history.ts` — `saveSearchHistory(row)`, `getSearchHistory(userId)`, `markSearchHistoryImported(id)` — reads and writes `lead_search_history` rows
 
 ---
@@ -216,3 +232,4 @@ const handleImport = (leads: Lead[], msgIndex: number) => {
 | 2026-03-23 | apollo-search Edge Function implemented — real Apollo search, enrichment, ZeroBounce validation, credit logging | Edge Function, apollo.ts |
 | 2026-03-23 | Phone number reveal: async webhook from Apollo, apolloId tracking, pending indicator | apollo-search, apollo-phone-webhook, LeadGeneratorPage |
 | 2026-03-24 | Search history persistence: results saved to DB immediately, chat restores on navigation | `LeadGeneratorPage.tsx`, `search-history.ts` |
+| 2026-03-24 | Conversational lead generator: GPT-4.1-mini manages dialog, confirms before searching, suggests refinements, clickable action buttons | `lead-gen-chat`, `LeadGeneratorPage`, `lead-gen-chat.ts` |

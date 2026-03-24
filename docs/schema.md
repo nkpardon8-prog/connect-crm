@@ -443,6 +443,7 @@ Supabase Edge Functions provide server-side compute for operations that require 
 | `unsubscribe` | `supabase/functions/unsubscribe/index.ts` | Public endpoint (no auth): validates token from query param, inserts row into `unsubscribes`, returns confirmation page | — |
 | `generate-template` | `supabase/functions/generate-template/index.ts` | Generates or improves email templates via GPT-4.1-mini; temperature 0.7 for generation from description, 0.5 for cleanup of existing content | OpenRouter (GPT-4.1-mini) |
 | `process-campaigns` | `supabase/functions/process-campaigns/index.ts` | Invoked every minute by pg_cron — queries campaigns where `scheduled_at <= now()` and `status = active`, dispatches sends via Resend, updates `campaign_enrollments` rows, handles paused campaign checks | Resend |
+| `lead-gen-chat` | `supabase/functions/lead-gen-chat/index.ts` | Conversational lead generator — GPT-4.1-mini (via OpenRouter) manages multi-turn dialog: confirms search intent, suggests refinements on zero results, returns clickable action buttons; Apollo search pipeline (prompt parsing, People Search, bulk enrichment, contact scoring, credit logging) runs inline | OpenRouter (GPT-4.1-mini), Apollo.io API |
 
 ### campaign-ai
 
@@ -463,6 +464,12 @@ Receives asynchronous phone reveal payloads from Apollo.io. When `apollo-search`
 Accepts a free-text user prompt describing an ideal customer profile. Uses Qwen 3.5 Flash (via OpenRouter) to parse the prompt into structured Apollo filters (job title, seniority, industry, company size, location). Calls Apollo's `/mixed_people/search` endpoint, then bulk-enriches results via Apollo's `/people/bulk_match` for verified emails and phone numbers. Validates email deliverability via ZeroBounce and scores each contact 0–100 by contact quality. Writes credit usage to the `apollo_usage` table. Returns up to 50 enriched, scored leads to the frontend.
 
 **Environment secrets required:** `APOLLO_API_KEY`, `OPENROUTER_API_KEY`, `ZEROBOUNCE_API_KEY` (set via `supabase secrets set`)
+
+### lead-gen-chat
+
+Manages the conversational lead generation flow. Accepts the full chat message history from the frontend. Uses GPT-4.1-mini (via OpenRouter) to determine the next dialog step: if the user has described a search but not yet confirmed it, the model returns a confirmation summary with clickable action button suggestions ("Yes, search now", "Refine criteria"). Once the user confirms, the full Apollo search pipeline runs inline — GPT-4.1-mini parses the prompt into structured filters, Apollo People Search is called, results are bulk-enriched, and each contact is scored 0–100 by contact quality. If the search returns zero results, GPT-4.1-mini generates an explanation and 2–3 refinement suggestions as clickable action buttons. Credit usage is written to `apollo_usage`.
+
+**Environment secrets required:** `OPENROUTER_API_KEY`, `APOLLO_API_KEY`
 
 ### create-invite
 
@@ -554,3 +561,4 @@ The `process-campaigns` cron job is then registered as described in its Edge Fun
 | 2026-03-23 | Campaign Engine Phase 3b: `timezone` (text, nullable) and `engagement_score` (integer, default 0) added to leads; `smart_send` (boolean, default false) added to campaigns | leads, campaigns |
 | 2026-03-23 | Apollo phone reveal: apollo_id column added to leads for webhook matching; apollo-phone-webhook Edge Function added | leads table, supabase/functions/apollo-phone-webhook/ |
 | 2026-03-24 | lead_search_history table added: persists Apollo search results immediately on return, enables chat restore on navigation | lead_search_history, src/lib/api/search-history.ts |
+| 2026-03-24 | lead-gen-chat Edge Function added: GPT-4.1-mini conversation manager with inlined Apollo search pipeline, clickable action buttons, zero-result refinements | supabase/functions/lead-gen-chat/ |

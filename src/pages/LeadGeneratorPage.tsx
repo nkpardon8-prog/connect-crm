@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLeads } from '@/hooks/use-leads';
 import { useAuth } from '@/contexts/AuthContext';
-import { searchApollo } from '@/lib/api/apollo';
+import { sendLeadGenMessage } from '@/lib/api/lead-gen-chat';
 import { saveSearchHistory, loadSearchHistory, markSearchImported, type SearchHistoryEntry } from '@/lib/api/search-history';
 import type { Lead } from '@/types/crm';
 import { Card, CardContent } from '@/components/ui/card';
@@ -10,22 +10,13 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Sparkles, Send, Bot, User as UserIcon, Import, Mail, Phone } from 'lucide-react';
 
 interface ChatMessage {
   role: 'user' | 'bot';
   content: string;
   leads?: Lead[];
+  actions?: { label: string; prompt: string }[];
 }
 
 export default function LeadGeneratorPage() {
@@ -38,11 +29,7 @@ export default function LeadGeneratorPage() {
   const [loading, setLoading] = useState(false);
   const [importedSets, setImportedSets] = useState<Set<number>>(new Set());
   const [selectedCount, setSelectedCount] = useState(25);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [pendingPrompt, setPendingPrompt] = useState('');
   const [historyIds, setHistoryIds] = useState<Map<number, string>>(new Map());
-
-  const estimatedCredits = Math.min(selectedCount * 2, 50);
 
   useEffect(() => {
     if (!user) return;
@@ -54,6 +41,12 @@ export default function LeadGeneratorPage() {
       ];
       const restoredImported = new Set<number>();
       const restoredHistoryIds = new Map<number, string>();
+
+      const standardResultActions = [
+        { label: 'Also check Directors', prompt: 'Also search for Director-level roles' },
+        { label: 'Expand location', prompt: 'Expand to nearby locations' },
+        { label: 'Narrow by size', prompt: 'Narrow by company size' },
+      ];
 
       for (const entry of history) {
         // User message
@@ -67,6 +60,7 @@ export default function LeadGeneratorPage() {
           role: 'bot',
           content: botContent,
           leads: entry.leads.length > 0 ? entry.leads : undefined,
+          actions: entry.leads.length > 0 ? standardResultActions : undefined,
         });
         // Track history ID for this bot message
         restoredHistoryIds.set(botIndex, entry.id);
@@ -82,61 +76,66 @@ export default function LeadGeneratorPage() {
     }).catch(console.error);
   }, [user]);
 
-  const handleSend = () => {
-    if (!input.trim() || loading) return;
-    setPendingPrompt(input.trim());
-    setShowConfirm(true);
-  };
+  const handleSend = async (overrideText?: string) => {
+    const text = (overrideText || input).trim();
+    if (!text || loading) return;
 
-  const executeSearch = async () => {
-    setShowConfirm(false);
-    const userMsg: ChatMessage = { role: 'user', content: pendingPrompt };
+    const currentMessages = [...messages];
+    const userMsg: ChatMessage = { role: 'user', content: text };
     setMessages(prev => [...prev, userMsg]);
-    setInput('');
+    if (!overrideText) setInput('');
     setLoading(true);
 
     try {
-      const result = await searchApollo(pendingPrompt, selectedCount);
+      const chatHistory = currentMessages
+        .slice(1) // Skip welcome message
+        .map(m => ({
+          role: (m.role === 'bot' ? 'assistant' : 'user') as 'user' | 'assistant',
+          content: m.content,
+        }));
 
-      // Save to search history immediately
-      let historyId = '';
-      try {
-        historyId = await saveSearchHistory({
-          userId: user!.id,
-          prompt: pendingPrompt,
-          leads: result.leads,
-          filters: result.filtersUsed,
-          totalFound: result.totalFound,
-          creditsUsed: result.creditsUsed,
-        });
-      } catch (e) {
-        console.error('Failed to save search history:', e);
-      }
-
-      const botContent = result.leads.length > 0
-        ? `Found ${result.totalFound.toLocaleString()} total matches. Showing ${result.leads.length} enriched contacts with verified contact info (${result.creditsUsed} credits used).`
-        : 'No matching contacts found with verified contact information. Try broadening your search criteria.';
+      const result = await sendLeadGenMessage(text, chatHistory, selectedCount);
 
       const botMsg: ChatMessage = {
         role: 'bot',
-        content: botContent,
+        content: result.response,
         leads: result.leads.length > 0 ? result.leads : undefined,
+        actions: result.actions.length > 0 ? result.actions : undefined,
       };
-
-      // Capture current length before the state update to compute bot message index.
-      // At this point messages has: initial welcome + user msg just added = messages.length + 1.
-      // Bot msg will land at that index + 1, i.e. messages.length + 1.
-      const botIndex = messages.length + 1;
       setMessages(prev => [...prev, botMsg]);
-      if (historyId) {
-        setHistoryIds(prev => { const next = new Map(prev); next.set(botIndex, historyId); return next; });
+
+      // Save to search history if leads returned
+      if (result.leads.length > 0) {
+        try {
+          const historyId = await saveSearchHistory({
+            userId: user!.id,
+            prompt: text,
+            leads: result.leads,
+            filters: result.filters || {},
+            totalFound: result.totalFound,
+            creditsUsed: result.creditsUsed,
+          });
+          // Track for import — bot message is at currentMessages.length + 1
+          // (currentMessages had welcome + prior messages, +1 for user msg just added)
+          setHistoryIds(prev => {
+            const n = new Map(prev);
+            n.set(currentMessages.length + 1, historyId);
+            return n;
+          });
+        } catch (e) { console.error('Failed to save search history:', e); }
       }
-    } catch (e) {
-      const errorMsg = e instanceof Error ? e.message : 'An unexpected error occurred';
-      setMessages(prev => [...prev, { role: 'bot', content: `Error: ${errorMsg}` }]);
+    } catch (err) {
+      setMessages(prev => [...prev, {
+        role: 'bot',
+        content: `Error: ${err instanceof Error ? err.message : 'Something went wrong'}`,
+      }]);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAction = (prompt: string) => {
+    handleSend(prompt);
   };
 
   const handleImport = (leads: Lead[], msgIndex: number) => {
@@ -240,6 +239,18 @@ export default function LeadGeneratorPage() {
                     </div>
                   </div>
                 )}
+                {msg.actions && msg.actions.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {msg.actions.map((action, j) => (
+                      <Button key={j} variant="outline" size="sm" className="text-xs h-7"
+                        onClick={() => handleAction(action.prompt)}
+                        disabled={loading}
+                      >
+                        {action.label}
+                      </Button>
+                    ))}
+                  </div>
+                )}
               </div>
               {msg.role === 'user' && (
                 <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
@@ -264,7 +275,7 @@ export default function LeadGeneratorPage() {
         <div className="p-4 border-t">
           <form onSubmit={e => { e.preventDefault(); handleSend(); }} className="flex gap-2">
             <Input
-              placeholder="Describe your ideal customer profile..."
+              placeholder="Describe who you're looking for..."
               value={input}
               onChange={e => setInput(e.target.value)}
               className="flex-1"
@@ -286,22 +297,6 @@ export default function LeadGeneratorPage() {
         </div>
       </Card>
 
-      {/* Confirmation Dialog */}
-      <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Search Apollo.io</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will search for up to {selectedCount} leads and enrich up to {estimatedCredits} contacts to find verified contact information.
-              Approximately <strong>{estimatedCredits} Apollo credits</strong> will be used.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={executeSearch}>Search</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
