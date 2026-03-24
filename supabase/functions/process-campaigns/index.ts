@@ -93,12 +93,12 @@ Deno.serve(async (req) => {
       // Bulk-fetch lead data for merge fields
       const leadIds = enrollments.map(e => e.lead_id).filter(Boolean)
       const { data: leadsData } = await supabaseAdmin.from('leads')
-        .select('id, first_name, company, timezone')
+        .select('id, first_name, company, timezone, email_status')
         .in('id', leadIds)
 
-      const leadMap = new Map<string, { first_name: string; company: string; timezone: string | null }>()
+      const leadMap = new Map<string, { first_name: string; company: string; timezone: string | null; email_status: string | null }>()
       for (const l of leadsData || []) {
-        leadMap.set(l.id, { first_name: l.first_name, company: l.company, timezone: l.timezone ?? null })
+        leadMap.set(l.id, { first_name: l.first_name, company: l.company, timezone: l.timezone ?? null, email_status: l.email_status ?? null })
       }
 
       // Smart send: defer enrollments where it's not 9 AM local yet
@@ -122,6 +122,27 @@ Deno.serve(async (req) => {
         enrollments = (enrollments || []).filter(e => !deferredIds.includes(e.id))
         if (enrollments.length === 0) continue // All deferred, skip this campaign for now
       }
+
+      // Skip leads with invalid email — mark as bounced so they don't re-process
+      const invalidEnrollmentIds: string[] = []
+      enrollments = enrollments.filter(e => {
+        if (!e.lead_id) return true  // bare-email enrollment, no lead to check
+        const lead = leadMap.get(e.lead_id)
+        if (lead?.email_status === 'invalid') {
+          invalidEnrollmentIds.push(e.id)
+          return false
+        }
+        return true
+      })
+
+      if (invalidEnrollmentIds.length > 0) {
+        await supabaseAdmin.from('campaign_enrollments')
+          .update({ status: 'bounced' })
+          .in('id', invalidEnrollmentIds)
+        console.log(`Marked ${invalidEnrollmentIds.length} enrollments as bounced (invalid email)`)
+      }
+
+      if (enrollments.length === 0) continue
 
       // Build email batch
       const resendEmails = enrollments.map(e => {
@@ -287,7 +308,13 @@ Deno.serve(async (req) => {
       let company = ''
       if (enrollment.lead_id) {
         const { data: lead } = await supabaseAdmin.from('leads')
-          .select('first_name, company').eq('id', enrollment.lead_id).single()
+          .select('first_name, company, email_status').eq('id', enrollment.lead_id).single()
+        if (lead?.email_status === 'invalid') {
+          await supabaseAdmin.from('campaign_enrollments')
+            .update({ status: 'bounced' }).eq('id', enrollment.id)
+          console.log(`Drip skip: enrollment ${enrollment.id} lead ${enrollment.lead_id} has invalid email`)
+          continue
+        }
         if (lead) { firstName = lead.first_name; company = lead.company }
       }
 

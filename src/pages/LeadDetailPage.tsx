@@ -269,11 +269,19 @@ export default function LeadDetailPage() {
                       <span>{lead.phone}</span>
                     </button>
                   ) : null}
-                  <button onClick={handleEmailClick} className="flex items-center gap-2 text-primary hover:underline w-full min-w-0">
-                    <Mail className="h-4 w-4 flex-shrink-0" />
-                    <span className="truncate flex-1">{lead.email}</span>
-                    {emailStatusBadge(lead.emailStatus)}
-                  </button>
+                  {lead.emailStatus === 'invalid' ? (
+                    <div className="flex items-center gap-2 text-muted-foreground cursor-not-allowed w-full min-w-0">
+                      <Mail className="h-4 w-4 flex-shrink-0" />
+                      <span className="truncate flex-1 line-through">{lead.email}</span>
+                      {emailStatusBadge(lead.emailStatus)}
+                    </div>
+                  ) : (
+                    <button onClick={handleEmailClick} className="flex items-center gap-2 text-primary hover:underline w-full min-w-0">
+                      <Mail className="h-4 w-4 flex-shrink-0" />
+                      <span className="truncate flex-1">{lead.email}</span>
+                      {emailStatusBadge(lead.emailStatus)}
+                    </button>
+                  )}
                   {lead.linkedinUrl && (
                     <a href={lead.linkedinUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline">
                       <Linkedin className="h-4 w-4 flex-shrink-0" />

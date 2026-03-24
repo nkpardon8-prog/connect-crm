@@ -225,10 +225,17 @@ export default function LeadsPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <button onClick={e => handleEmail(e, lead.id, lead.email)} className="inline-flex items-center gap-1 text-primary hover:underline text-sm truncate max-w-[180px]">
-                      <Mail className="h-3.5 w-3.5 flex-shrink-0" />
-                      {lead.email}
-                    </button>
+                    {lead.emailStatus === 'invalid' ? (
+                      <span className="inline-flex items-center gap-1 text-muted-foreground line-through text-sm cursor-not-allowed truncate max-w-[180px]">
+                        <Mail className="h-3.5 w-3.5 flex-shrink-0" />
+                        {lead.email}
+                      </span>
+                    ) : (
+                      <button onClick={e => handleEmail(e, lead.id, lead.email)} className="inline-flex items-center gap-1 text-primary hover:underline text-sm truncate max-w-[180px]">
+                        <Mail className="h-3.5 w-3.5 flex-shrink-0" />
+                        {lead.email}
+                      </button>
+                    )}
                   </TableCell>
                   <TableCell className="text-xs">{emailStatusBadge(lead.emailStatus)}</TableCell>
                   <TableCell className="text-xs">
