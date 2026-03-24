@@ -64,16 +64,54 @@ export async function deleteCampaign(id: string): Promise<void> {
 
 export async function createEnrollments(
   campaignId: string,
-  recipients: { leadId: string; email: string }[]
+  recipients: { leadId: string; email: string; nextSendAt?: string | null; currentStep?: number }[]
 ): Promise<void> {
   const rows = recipients.map(r => ({
     campaign_id: campaignId,
     lead_id: r.leadId,
     email: r.email,
     status: 'pending',
+    next_send_at: r.nextSendAt !== undefined ? r.nextSendAt : null,
+    current_step: r.currentStep ?? 0,
   }));
   const { error } = await supabase.from('campaign_enrollments').insert(rows);
   if (error) throw error;
+}
+
+export async function createSequenceWithSteps(
+  steps: { subject: string; body: string; delayDays: number }[],
+  createdBy: string
+): Promise<string> {
+  // Create sequence
+  const { data: seq, error: seqErr } = await supabase
+    .from('campaign_sequences')
+    .insert({ name: `Sequence ${Date.now()}`, created_by: createdBy })
+    .select()
+    .single();
+  if (seqErr) throw seqErr;
+
+  // Create steps
+  const stepRows = steps.map((s, i) => ({
+    sequence_id: seq.id,
+    order: i,
+    subject: s.subject,
+    body: s.body,
+    delay_days: s.delayDays,
+  }));
+  const { error: stepsErr } = await supabase.from('campaign_steps').insert(stepRows);
+  if (stepsErr) throw stepsErr;
+
+  return seq.id;
+}
+
+export async function getSequenceSteps(sequenceId: string) {
+  const { data, error } = await supabase
+    .from('campaign_steps')
+    .select('*')
+    .eq('sequence_id', sequenceId)
+    .order('order', { ascending: true });
+  if (error) throw error;
+  return transformRows<{ id: string; sequenceId: string; order: number; subject: string; body: string; delayDays: number }>(data || []);
 }
 
 export async function updateEnrollmentStatus(

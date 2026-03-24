@@ -15,12 +15,13 @@ import { toast } from 'sonner';
 import { ArrowLeft, ArrowRight, Send, Save, Eye, Users, FileText } from 'lucide-react';
 import AudienceSelector from '@/components/campaigns/AudienceSelector';
 import TemplateEditor from '@/components/campaigns/TemplateEditor';
+import SequenceEditor from '@/components/campaigns/SequenceEditor';
 
 export default function CampaignBuilderPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { leads } = useLeads();
-  const { addCampaignAsync, updateCampaign, createEnrollments } = useCampaigns();
+  const { addCampaignAsync, updateCampaign, createEnrollments, createSequenceWithSteps } = useCampaigns();
   const { addActivity } = useActivities();
   const queryClient = useQueryClient();
 
@@ -32,6 +33,8 @@ export default function CampaignBuilderPage() {
   const [sending, setSending] = useState(false);
   const [sendMode, setSendMode] = useState<'now' | 'schedule'>('now');
   const [scheduledAt, setScheduledAt] = useState('');
+  const [useSequence, setUseSequence] = useState(false);
+  const [followUps, setFollowUps] = useState<{ subject: string; body: string; delayDays: number }[]>([]);
 
   // Only show leads with verified emails
   const emailSafeLeads = useMemo(() =>
@@ -65,6 +68,14 @@ export default function CampaignBuilderPage() {
     if (sendMode === 'schedule') {
       if (!scheduledAt) { toast.error('Select a date and time'); return; }
       try {
+        let sequenceId: string | undefined;
+        if (useSequence && followUps.length > 0) {
+          const allSteps = [
+            { subject: subject.trim(), body: body.trim(), delayDays: 0 },
+            ...followUps.map(f => ({ subject: f.subject.trim(), body: f.body.trim(), delayDays: f.delayDays })),
+          ];
+          sequenceId = await createSequenceWithSteps(allSteps, user.id);
+        }
         const campaign = await addCampaignAsync({
           name: campaignName.trim(),
           subject: subject.trim(),
@@ -75,6 +86,7 @@ export default function CampaignBuilderPage() {
           status: 'scheduled',
           scheduledAt: new Date(scheduledAt).toISOString(),
           abTestEnabled: false,
+          sequenceId: sequenceId || undefined,
         });
         const recipients = Array.from(selectedLeadIds).map(leadId => {
           const lead = leads.find(l => l.id === leadId);
@@ -121,15 +133,31 @@ export default function CampaignBuilderPage() {
 
       const result = await sendBulkEmails(campaignEmails, campaign.id);
 
+      // Create sequence if multi-step
+      let sequenceId: string | undefined;
+      if (useSequence && followUps.length > 0) {
+        const allSteps = [
+          { subject: subject.trim(), body: body.trim(), delayDays: 0 },
+          ...followUps.map(f => ({ subject: f.subject.trim(), body: f.body.trim(), delayDays: f.delayDays })),
+        ];
+        sequenceId = await createSequenceWithSteps(allSteps, user.id);
+        await updateCampaign(campaign.id, { sequenceId });
+      }
+
       // Update campaign status to completed on success
       await updateCampaign(campaign.id, { status: 'completed' });
 
       // Create enrollment rows for tracking
-      const recipients = recipientIds.map(leadId => {
+      const enrollmentRecipients = Array.from(selectedLeadIds).map(leadId => {
         const lead = leads.find(l => l.id === leadId);
+        if (useSequence && followUps.length > 0) {
+          // Step 0 already sent — enroll at step 1 for the first follow-up
+          const nextSendAt = new Date(Date.now() + followUps[0].delayDays * 24 * 60 * 60 * 1000).toISOString();
+          return { leadId, email: lead?.email || '', currentStep: 1, nextSendAt };
+        }
         return { leadId, email: lead?.email || '' };
       }).filter(r => r.email);
-      await createEnrollments(campaign.id, recipients);
+      await createEnrollments(campaign.id, enrollmentRecipients);
 
       if (result?.failedCount > 0) {
         toast.warning(`${result.failedCount} of ${campaignEmails.length} emails failed`);
@@ -221,7 +249,26 @@ export default function CampaignBuilderPage() {
             <CardTitle className="text-base flex items-center gap-2"><FileText className="h-4 w-4" /> Email Template</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <TemplateEditor subject={subject} body={body} onSubjectChange={setSubject} onBodyChange={setBody} />
+            <div className="flex gap-2 mb-4">
+              <Button variant={!useSequence ? 'default' : 'outline'} size="sm" onClick={() => setUseSequence(false)}>
+                Single Email
+              </Button>
+              <Button variant={useSequence ? 'default' : 'outline'} size="sm" onClick={() => setUseSequence(true)}>
+                Multi-Step Sequence
+              </Button>
+            </div>
+            {!useSequence ? (
+              <TemplateEditor subject={subject} body={body} onSubjectChange={setSubject} onBodyChange={setBody} />
+            ) : (
+              <SequenceEditor
+                introSubject={subject}
+                introBody={body}
+                onIntroSubjectChange={setSubject}
+                onIntroBodyChange={setBody}
+                followUps={followUps}
+                onFollowUpsChange={setFollowUps}
+              />
+            )}
             <div className="flex justify-between">
               <Button variant="outline" onClick={() => setStep(1)} className="gap-1.5">
                 <ArrowLeft className="h-3.5 w-3.5" /> Back

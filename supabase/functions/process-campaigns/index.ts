@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
     }
 
     let scheduledProcessed = 0
-    let activeProcessed = 0
+    const activeProcessed = 0
 
     // Step 1: Claim scheduled campaigns (atomic — prevents double-sends)
     const { data: scheduledCampaigns } = await supabaseAdmin
@@ -52,6 +52,7 @@ Deno.serve(async (req) => {
         .select('*')
         .eq('campaign_id', campaign.id)
         .eq('status', 'pending')
+        .is('next_send_at', null)
         .limit(100) // Process in chunks to avoid timeout
 
       if (!enrollments?.length) {
@@ -92,7 +93,7 @@ Deno.serve(async (req) => {
           .replace(/\{\{firstName\}\}/g, lead?.first_name || '')
           .replace(/\{\{company\}\}/g, lead?.company || '')
 
-        let emailSubject = campaign.subject
+        const emailSubject = campaign.subject
           .replace(/\{\{firstName\}\}/g, lead?.first_name || '')
           .replace(/\{\{company\}\}/g, lead?.company || '')
 
@@ -172,10 +173,143 @@ Deno.serve(async (req) => {
       scheduledProcessed++
     }
 
+    // Step 3: Process drip sequence enrollments (due steps)
+    let dripProcessed = 0
+    const { data: dueEnrollments } = await supabaseAdmin
+      .from('campaign_enrollments')
+      .select('*')
+      .eq('status', 'pending')
+      .not('next_send_at', 'is', null)
+      .lte('next_send_at', new Date().toISOString())
+      .limit(50)
+
+    for (const enrollment of dueEnrollments || []) {
+      // Fetch the campaign
+      const { data: campaign } = await supabaseAdmin
+        .from('campaigns')
+        .select('*')
+        .eq('id', enrollment.campaign_id)
+        .single()
+
+      if (!campaign || campaign.status === 'paused' || campaign.status === 'completed' || !campaign.sequence_id) continue
+
+      // Check stop conditions
+      const { data: unsub } = await supabaseAdmin.from('unsubscribes')
+        .select('id').eq('email', enrollment.email).maybeSingle()
+      if (unsub) {
+        await supabaseAdmin.from('campaign_enrollments')
+          .update({ status: 'unsubscribed' }).eq('id', enrollment.id)
+        continue
+      }
+
+      // Fetch the step for current_step (column name is 'order')
+      const { data: step } = await supabaseAdmin
+        .from('campaign_steps')
+        .select('*')
+        .eq('sequence_id', campaign.sequence_id)
+        .eq('order', enrollment.current_step)
+        .single()
+
+      if (!step) {
+        // No more steps — mark complete
+        await supabaseAdmin.from('campaign_enrollments')
+          .update({ status: 'sent', next_send_at: null }).eq('id', enrollment.id)
+        continue
+      }
+
+      // Fetch sender profile
+      const { data: profile } = await supabaseAdmin.from('profiles')
+        .select('name, sending_email').eq('id', campaign.sent_by).single()
+      if (!profile?.sending_email) continue
+
+      // Fetch lead data for merge fields
+      let firstName = ''
+      let company = ''
+      if (enrollment.lead_id) {
+        const { data: lead } = await supabaseAdmin.from('leads')
+          .select('first_name, company').eq('id', enrollment.lead_id).single()
+        if (lead) { firstName = lead.first_name; company = lead.company }
+      }
+
+      // Build email
+      const emailSubject = step.subject.replace(/\{\{firstName\}\}/g, firstName).replace(/\{\{company\}\}/g, company)
+      let emailBody = step.body.replace(/\{\{firstName\}\}/g, firstName).replace(/\{\{company\}\}/g, company)
+
+      if (SITE_URL && emailBody.includes('{{unsubscribeLink}}')) {
+        const token = crypto.randomUUID()
+        emailBody = emailBody.replace(/\{\{unsubscribeLink\}\}/g,
+          `${SITE_URL}/unsubscribe/${token}?email=${encodeURIComponent(enrollment.email)}`)
+      }
+
+      // Send via Resend
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: `${profile.name} <${profile.sending_email}>`,
+          to: [enrollment.email],
+          subject: emailSubject,
+          text: emailBody,
+        }),
+      })
+
+      if (res.ok) {
+        const { id: providerMessageId } = await res.json()
+
+        // Insert email record
+        await supabaseAdmin.from('emails').insert({
+          lead_id: enrollment.lead_id,
+          from: profile.sending_email,
+          to: enrollment.email,
+          subject: emailSubject,
+          body: emailBody,
+          sent_at: new Date().toISOString(),
+          read: true,
+          direction: 'outbound',
+          thread_id: `t-camp-${campaign.id}-${enrollment.lead_id || enrollment.id}`,
+          campaign_id: campaign.id,
+          provider_message_id: providerMessageId,
+        })
+
+        // Check if more steps exist
+        const { data: nextStep } = await supabaseAdmin
+          .from('campaign_steps')
+          .select('delay_days')
+          .eq('sequence_id', campaign.sequence_id)
+          .eq('order', enrollment.current_step + 1)
+          .maybeSingle()
+
+        if (nextStep) {
+          // More steps: increment and schedule next
+          const nextSendAt = new Date(Date.now() + nextStep.delay_days * 24 * 60 * 60 * 1000)
+          await supabaseAdmin.from('campaign_enrollments')
+            .update({
+              current_step: enrollment.current_step + 1,
+              next_send_at: nextSendAt.toISOString(),
+              sent_at: new Date().toISOString(),
+            })
+            .eq('id', enrollment.id)
+        } else {
+          // Last step — mark complete
+          await supabaseAdmin.from('campaign_enrollments')
+            .update({ status: 'sent', sent_at: new Date().toISOString(), next_send_at: null })
+            .eq('id', enrollment.id)
+        }
+
+        dripProcessed++
+      } else {
+        console.error('Drip send failed:', res.status, await res.text())
+      }
+    }
+
     return new Response(JSON.stringify({
       scheduledProcessed,
       activeProcessed,
       campaignsChecked: uniqueCampaigns.length,
+      dripProcessed,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

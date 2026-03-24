@@ -1,8 +1,10 @@
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCampaigns } from '@/hooks/use-campaigns';
 import { useEmails } from '@/hooks/use-emails';
 import { useLeads } from '@/hooks/use-leads';
 import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +38,18 @@ export default function CampaignDetailPage() {
 
   const campaign = campaigns.find(c => c.id === id);
   const campaignEmails = emails.filter(e => e.campaignId === id && e.direction === 'outbound');
+
+  // Get enrollments for this campaign
+  const [enrollments, setEnrollments] = useState<Array<{ leadId: string | null; status: string; currentStep: number }>>([]);
+  useEffect(() => {
+    if (!id) return;
+    supabase.from('campaign_enrollments')
+      .select('lead_id, status, current_step')
+      .eq('campaign_id', id)
+      .then(({ data }) => {
+        if (data) setEnrollments(data.map(e => ({ leadId: e.lead_id, status: e.status, currentStep: e.current_step })));
+      });
+  }, [id]);
 
   if (!campaign) {
     return (
@@ -161,11 +175,13 @@ export default function CampaignDetailPage() {
                 <TableHead className="text-xs">Name</TableHead>
                 <TableHead className="text-xs">Email</TableHead>
                 <TableHead className="text-xs">Status</TableHead>
+                <TableHead className="text-xs">Step</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {campaignEmails.map(email => {
                 const lead = leads.find(l => l.id === email.leadId);
+                const enrollment = enrollments.find(e => e.leadId === email.leadId);
                 const emailStatus = email.bouncedAt
                   ? 'Bounced'
                   : email.clickedAt
@@ -189,13 +205,16 @@ export default function CampaignDetailPage() {
                     <TableCell className={`text-xs font-medium ${statusColor}`}>
                       {emailStatus}
                     </TableCell>
+                    <TableCell className="text-xs">
+                      {enrollment ? `Step ${enrollment.currentStep + 1}` : '—'}
+                    </TableCell>
                   </TableRow>
                 );
               })}
               {campaignEmails.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={3}
+                    colSpan={4}
                     className="text-center text-xs text-muted-foreground py-4"
                   >
                     No emails sent yet

@@ -44,7 +44,10 @@ export function useCampaigns() {
       updateCampaignMutation.mutateAsync({ id, updates }),
     cloneCampaign: (id: string) => cloneCampaignMutation.mutateAsync(id),
     deleteCampaign: (id: string) => deleteCampaignMutation.mutateAsync(id),
-    createEnrollments: (campaignId: string, recipients: { leadId: string; email: string }[]) =>
+    createEnrollments: (campaignId: string, recipients: { leadId: string; email: string; nextSendAt?: string | null; currentStep?: number }[]) =>
       api.createEnrollments(campaignId, recipients),
+    createSequenceWithSteps: (steps: { subject: string; body: string; delayDays: number }[], createdBy: string) =>
+      api.createSequenceWithSteps(steps, createdBy),
+    getSequenceSteps: (sequenceId: string) => api.getSequenceSteps(sequenceId),
   };
 }

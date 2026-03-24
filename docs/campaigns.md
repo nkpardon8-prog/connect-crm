@@ -2,7 +2,7 @@
 
 > Campaign management dashboard with analytics, unsubscribe infrastructure, and template support.
 
-**Status:** Active (Phase 2a complete — Phase 2b pending)
+**Status:** Active (Phase 2b complete — Phase 3 pending)
 **Last Updated:** 2026-03-23
 **Related Docs:** [OVERVIEW.md](./OVERVIEW.md) | [outreach.md](./outreach.md) | [schema.md](./schema.md)
 
@@ -60,10 +60,22 @@ The campaign engine provides a full campaign management dashboard within the Out
 - On reply: sets lead `status` to `warm` automatically
 - Enrollment record updated to reflect reply received
 
+### Multi-Step Drip Sequences
+- Campaigns can define up to 5 sequential drip steps, each with its own delay (in days), subject, and body
+- Built with the SequenceEditor component — accessible from the Campaign Builder
+- Stop conditions: unsubscribe, reply, or bounce halts further steps for that recipient; opens do not stop the sequence
+- Sequence progress displayed on the CampaignDetailPage per-recipient (current step, steps completed, next send date)
+- `process-campaigns` Edge Function extended to process drip steps: evaluates delay windows, respects stop conditions, advances enrollment step counters
+
+### SequenceEditor
+- Multi-step drip configuration UI embedded in CampaignBuilderPage
+- Add/remove steps (up to 5); each step has delay_days, subject, and body fields
+- Persists steps to `campaign_steps` table via `sequence_id` on the campaign
+
 ### Campaign Builder
 - Route: `/outreach/campaign/new`
-- Multi-step form: Name + Audience → Template → Preview → Send/Draft
-- Integrates AudienceSelector and TemplateEditor components
+- Multi-step form: Name + Audience → Template → Sequence → Preview → Send/Draft
+- Integrates AudienceSelector, TemplateEditor, and SequenceEditor components
 - Preview step includes date/time picker for scheduled sends
 
 ### Template Library
@@ -128,7 +140,7 @@ Tracks unsubscribed leads. Token-based lookup. Indexed on lead_id and email.
 - **Phase 1a (complete):** DB schema, campaign list + analytics, detail page, unsubscribe infrastructure, cloning
 - **Phase 1b (complete):** Multi-step campaign builder, template library, AI template generation (GPT-4.1-mini), audience selector
 - **Phase 2a (complete):** Scheduled sends (date/time picker), pause/resume, per-recipient enrollment tracking, reply detection (auto-warm leads), pg_cron scheduler
-- **Phase 2b (pending):** Drip sends, follow-up sequences
+- **Phase 2b (complete):** Multi-step drip sequences (up to 5 steps), SequenceEditor, scheduler drip processing, stop conditions, sequence progress display
 - **Phase 3:** Apollo auto-gen pipeline, A/B test execution, smart send timing, lead engagement scoring
 
 ---
@@ -140,3 +152,4 @@ Tracks unsubscribed leads. Token-based lookup. Indexed on lead_id and email.
 | 2026-03-23 | Campaign Engine Phase 1a: DB schema, campaign list, analytics, detail page, unsubscribe, cloning | All campaign files |
 | 2026-03-23 | Campaign Engine Phase 1b: builder, templates, AI generation (GPT-4.1-mini), audience selector | CampaignBuilderPage, TemplateEditor, AudienceSelector, TemplateLibrary, generate-template |
 | 2026-03-23 | Phase 2a: scheduling, pause/resume, enrollment tracking, reply detection, pg_cron scheduler | process-campaigns, CampaignBuilderPage, CampaignDetailPage, CampaignList, email-events |
+| 2026-03-23 | Phase 2b: multi-step drip sequences, SequenceEditor, scheduler drip processing, stop conditions, sequence progress display | SequenceEditor, CampaignBuilderPage, process-campaigns, CampaignDetailPage |
