@@ -155,6 +155,21 @@ export default function CampaignDetailPage() {
         </div>
       </div>
 
+      {campaign.status === 'paused' && (
+        <Card className="border-amber-300 bg-amber-50 border">
+          <CardContent className="p-4 flex items-center gap-3">
+            <PauseCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-800">Campaign Paused</p>
+              <p className="text-xs text-amber-600">No emails are being sent. Click Resume to continue sending.</p>
+            </div>
+            <Button variant="outline" size="sm" className="gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-100" onClick={handleResume}>
+              <PlayCircle className="h-3.5 w-3.5" /> Resume
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <CampaignAnalytics {...stats} />
 
       {campaign.abTestEnabled && abStats && (
