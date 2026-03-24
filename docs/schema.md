@@ -65,6 +65,7 @@ Central CRM entity.
 | notes | text | NOT NULL | '' |
 | tags | text[] | NOT NULL | '{}' |
 | linkedin_url | text | — | NULL |
+| apollo_id | text | — | NULL |
 | email_status | text | NOT NULL | 'unverified' |
 | timezone | text | — | NULL |
 | engagement_score | integer | NOT NULL | 0 |
@@ -412,7 +413,8 @@ Supabase Edge Functions provide server-side compute for operations that require 
 | Function | Path | Purpose | External Service |
 |----------|------|---------|-----------------|
 | `campaign-ai` | `supabase/functions/campaign-ai/index.ts` | Proxies campaign copy generation to LLM | OpenRouter (DeepSeek V3.2) |
-| `apollo-search` | `supabase/functions/apollo-search/index.ts` | Parses prompt via LLM, searches Apollo, bulk-enriches contacts, scores results, logs credit usage | Apollo.io API, OpenRouter (Qwen 3.5 Flash) |
+| `apollo-search` | `supabase/functions/apollo-search/index.ts` | Parses prompt via LLM, searches Apollo, bulk-enriches contacts (reveal_phone_number=true), scores results, logs credit usage | Apollo.io API, OpenRouter (Qwen 3.5 Flash) |
+| `apollo-phone-webhook` | `supabase/functions/apollo-phone-webhook/index.ts` | Receives async phone reveal webhooks from Apollo; matches lead by apollo_id, updates leads.phone | Apollo.io (webhook) |
 | `send-email` | `supabase/functions/send-email/index.ts` | Delivers outbound emails (compose, reply, campaign batch) via Resend API | Resend |
 | `email-events` | `supabase/functions/email-events/index.ts` | Receives Resend webhook events: writes bounce/open/click timestamps to the emails table (`email.bounced`, `email.opened`, `email.clicked`); also handles `email.received` (inbound emails) — fetches full message body from Resend API, matches thread via `In-Reply-To` header, matches sender to a lead, inserts inbound email, logs `email_received` activity | Resend (webhook) |
 | `create-invite` | `supabase/functions/create-invite/index.ts` | Admin-only: validates caller is admin, generates a secure random token, inserts a row into `invites`, returns the invite link | — |
@@ -429,6 +431,12 @@ Accepts a campaign prompt, lead summaries, available industries, and chat histor
 **Environment secrets required:** `OPENROUTER_API_KEY` (set via `supabase secrets set`)
 
 **Shared utilities:** `supabase/functions/_shared/cors.ts` — CORS headers used by all Edge Functions.
+
+### apollo-phone-webhook
+
+Receives asynchronous phone reveal payloads from Apollo.io. When `apollo-search` enriches contacts with `reveal_phone_number=true`, Apollo delivers phone numbers to this webhook rather than returning them inline. The function extracts the Apollo person ID and phone number from the payload, looks up the matching lead by `apollo_id`, and updates `leads.phone`. Supabase Realtime then propagates the update to any connected frontend clients, replacing the "pending..." indicator in the search results table.
+
+**No additional environment secrets required.** Uses the service-role key available inside Edge Functions to bypass RLS for the update.
 
 ### apollo-search
 
@@ -524,3 +532,4 @@ The `process-campaigns` cron job is then registered as described in its Edge Fun
 | 2026-03-23 | Campaign Engine Phase 1b: generate-template Edge Function (GPT-4.1-mini via OpenRouter) for AI template generation and cleanup | supabase/functions/generate-template/ |
 | 2026-03-23 | Campaign Engine Phase 2a: campaign_enrollments table (per-recipient tracking), process-campaigns Edge Function, pg_cron scheduler setup | campaign_enrollments, supabase/functions/process-campaigns/ |
 | 2026-03-23 | Campaign Engine Phase 3b: `timezone` (text, nullable) and `engagement_score` (integer, default 0) added to leads; `smart_send` (boolean, default false) added to campaigns | leads, campaigns |
+| 2026-03-23 | Apollo phone reveal: apollo_id column added to leads for webhook matching; apollo-phone-webhook Edge Function added | leads table, supabase/functions/apollo-phone-webhook/ |

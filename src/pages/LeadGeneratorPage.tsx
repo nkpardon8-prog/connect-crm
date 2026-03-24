@@ -150,7 +150,7 @@ export default function LeadGeneratorPage() {
                               {l.phone ? (
                                 <span className="flex items-center gap-1"><Phone className="h-3 w-3 text-muted-foreground" />{l.phone}</span>
                               ) : (
-                                <span className="text-muted-foreground">—</span>
+                                <span className="text-[10px] text-muted-foreground italic">pending...</span>
                               )}
                             </TableCell>
                             <TableCell className="text-xs">{l.location}</TableCell>

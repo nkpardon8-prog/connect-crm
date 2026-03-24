@@ -658,6 +658,7 @@ export type Database = {
           status: string
           tags: string[]
           updated_at: string
+          apollo_id: string | null
         }
         Insert: {
           assigned_to: string
@@ -681,6 +682,7 @@ export type Database = {
           status?: string
           tags?: string[]
           updated_at?: string
+          apollo_id?: string | null
         }
         Update: {
           assigned_to?: string
@@ -704,6 +706,7 @@ export type Database = {
           status?: string
           tags?: string[]
           updated_at?: string
+          apollo_id?: string | null
         }
         Relationships: [
           {

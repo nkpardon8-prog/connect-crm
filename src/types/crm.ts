@@ -31,6 +31,7 @@ export interface Lead {
   linkedinUrl?: string;
   emailStatus?: string;
   timezone?: string;
+  apolloId?: string;
 }
 
 export type ActivityType = 'call' | 'email_sent' | 'email_received' | 'note' | 'status_change' | 'meeting';

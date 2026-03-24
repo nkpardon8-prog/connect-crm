@@ -23,6 +23,7 @@ interface LeadResult {
   industry: string
   location: string
   timezone: string | null
+  apolloId: string | null
   status: string
   assignedTo: string
   lastContactedAt: null
@@ -268,7 +269,12 @@ Deno.serve(async (req) => {
       const enrichRes = await fetch('https://api.apollo.io/api/v1/people/bulk_match', {
         method: 'POST',
         headers: { 'X-Api-Key': APOLLO_API_KEY, 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
-        body: JSON.stringify({ details: batch, reveal_personal_emails: false }),
+        body: JSON.stringify({
+          details: batch,
+          reveal_personal_emails: false,
+          reveal_phone_number: true,
+          webhook_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/apollo-phone-webhook`,
+        }),
       })
 
       if (!enrichRes.ok) {
@@ -363,6 +369,7 @@ Deno.serve(async (req) => {
             (person.state as string) || '',
             (person.country as string) || ''
           ),
+          apolloId: (person.id as string) || null,
           status: 'cold' as const,
           assignedTo: '',
           lastContactedAt: null,
