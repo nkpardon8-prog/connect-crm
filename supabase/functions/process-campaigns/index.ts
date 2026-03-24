@@ -129,19 +129,22 @@ Deno.serve(async (req) => {
           const batchEnrollments = enrollments.slice(i, i + 100)
 
           // Batch-update enrollment statuses + insert email records
-          const emailRows = batchEnrollments.map((e, j) => ({
+          const emailRows = batchEnrollments.map((e, j) => {
+            // Use substituted subject/body from the resend payload (not raw template)
+            const sentEmail = resendEmails[i + j]
+            return {
             lead_id: e.lead_id,
             from: profile.sending_email,
             to: e.email,
-            subject: campaign.subject,
-            body: campaign.body,
+            subject: sentEmail?.subject || campaign.subject,
+            body: sentEmail?.text || campaign.body,
             sent_at: new Date().toISOString(),
             read: true,
             direction: 'outbound',
             thread_id: `t-camp-${campaign.id}-${e.lead_id || e.id}`,
             campaign_id: campaign.id,
             provider_message_id: resendResults?.[j]?.id || null,
-          }))
+          }})
 
           await supabaseAdmin.from('emails').insert(emailRows)
 
