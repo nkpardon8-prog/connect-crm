@@ -118,6 +118,17 @@ const myData = isAdmin ? allData : allData.filter(d => d.assignedTo === user?.id
 
 After a successful mutation, hooks call `queryClient.invalidateQueries({ queryKey: [entityKey] })` to refetch the affected entity. Loading and error states are per-entity, not global.
 
+### Supabase Realtime Subscriptions
+
+The four core hooks — `useLeads`, `useDeals`, `useEmails`, and `useActivities` — each establish a **Supabase Realtime channel** on mount (inside a `useEffect` that runs alongside the initial `useQuery`). The channel subscribes to all `postgres_changes` events (`INSERT`, `UPDATE`, `DELETE`) on the corresponding table. On any incoming event the hook calls `queryClient.invalidateQueries({ queryKey: [entityKey] })`, which causes React Query to refetch the data and update every component that consumes that hook.
+
+This means:
+- Changes made by any user (or by Edge Functions / background jobs) are automatically reflected in the UI without a page refresh.
+- No manual polling is required.
+- The subscription is torn down via the channel's `unsubscribe()` in the `useEffect` cleanup, preventing leaks on unmount.
+
+Only the four core hooks carry Realtime subscriptions. The remaining hooks (`useSuggestions`, `useCampaigns`, `useSequences`, `useProfiles`) rely on the standard mutation-triggered invalidation pattern.
+
 ### Hook Reference
 
 | Hook | Query Key | Data Returned | Mutations |
@@ -229,12 +240,13 @@ See [schema.md](./schema.md) for full database documentation.
 - No undo/redo capability
 - No batch update mechanism (each update triggers re-render)
 - No event system or side effects (e.g., no auto-notification on new activity)
+- Realtime subscriptions are on the four core hooks only; `useSuggestions`, `useCampaigns`, `useSequences`, and `useProfiles` still require a manual page action or refresh to pick up external changes
 
 ---
 
 ## Future Considerations
 
-- When adding real-time updates: consider Supabase Realtime subscriptions alongside React Query cache invalidation
+- Extend Supabase Realtime subscriptions to the remaining hooks (`useSuggestions`, `useCampaigns`, `useSequences`, `useProfiles`)
 - Add optimistic updates for mutations to improve perceived performance
 - Add per-entity error boundaries to isolate failures gracefully
 
@@ -249,3 +261,4 @@ See [schema.md](./schema.md) for full database documentation.
 | 2026-03-22 | AuthContext rewritten for Supabase Auth (async login/logout, session persistence, loading state) | `AuthContext.tsx` |
 | 2026-03-23 | CRMContext replaced by 8 React Query hooks, mockData.ts deleted | All hooks, all pages |
 | 2026-03-23 | useProfiles: added updateProfile mutation. AuthContext: added refreshUser function | `use-profiles.ts`, `AuthContext.tsx` |
+| 2026-03-23 | Supabase Realtime: leads, deals, emails, activities hooks auto-refresh on DB changes | `use-leads.ts`, `use-deals.ts`, `use-emails.ts`, `use-activities.ts` |

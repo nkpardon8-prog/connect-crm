@@ -59,7 +59,7 @@ When adding changelog entries, use this format:
 | 2 | Data Model | [data-model.md](./data-model.md) | Active | TypeScript types, entity relationships, mock data inventory |
 | 3 | State Management | [state-management.md](./state-management.md) | Active | AuthContext, React Query hooks, all CRUD operations |
 | 4 | Authentication | [authentication.md](./authentication.md) | Active | Login UI, role-based access, auth gating, Supabase Auth |
-| 5 | Dashboard | [dashboard.md](./dashboard.md) | Partial | KPI stats, charts (some hardcoded data), team leaderboard |
+| 5 | Dashboard | [dashboard.md](./dashboard.md) | Active | KPI stats, charts (all real data), team leaderboard |
 | 6 | Leads Management | [leads.md](./leads.md) | Active | Lead list with search/filter/bulk, detail view with timeline |
 | 7 | Lead Generator | [lead-generator.md](./lead-generator.md) | Active | Chat-based lead discovery via Apollo.io with enrichment |
 | 8 | Outreach & Email | [outreach.md](./outreach.md) | Active | Gmail-style inbox, compose, campaigns (AI + manual), sequences (display-only) |
@@ -261,3 +261,4 @@ Track all significant changes here: new features, architectural shifts, new rout
 | 2026-03-23 | Campaign Engine Phase 3a: A/B testing (full body variants, 50/50 split, per-variant analytics, winner comparison), Apollo auto-gen pipeline from campaign builder with credit confirmation | Campaigns | CampaignBuilderPage, CampaignDetailPage, CampaignAnalytics, send-email |
 | 2026-03-23 | Campaign Engine Phase 3b (FINAL): Smart send timing (9 AM local via lead timezone, smart_send on campaigns), lead engagement scoring (opens×1 + clicks×3 + replies×5, badge in leads table, Dashboard "Hottest Leads" leaderboard); Campaign Engine now fully complete | Campaigns, Leads, Dashboard, Schema | process-campaigns, CampaignBuilderPage, LeadsPage, LeadDetailPage, DashboardPage, leads table, campaigns table |
 | 2026-03-23 | Lead editing + deal creation UI | Leads, Pipeline | Lead detail fields editable, pipeline has New Deal dialog |
+| 2026-03-23 | Phase B: real dashboard charts + Supabase Realtime on all core hooks | Dashboard, State Management | Weekly activity + revenue computed from real data, multi-user live updates via Realtime |

@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '@/lib/api/emails';
+import { supabase } from '@/lib/supabase';
 import type { EmailMessage } from '@/types/crm';
 
 export function useEmails() {
@@ -9,6 +11,17 @@ export function useEmails() {
     queryKey: ['emails'],
     queryFn: api.getEmails,
   });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('emails-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'emails' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['emails'] });
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [queryClient]);
 
   const addEmailMutation = useMutation({
     mutationFn: (email: Omit<EmailMessage, 'id'>) =>

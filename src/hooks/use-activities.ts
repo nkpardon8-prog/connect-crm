@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '@/lib/api/activities';
+import { supabase } from '@/lib/supabase';
 import type { Activity } from '@/types/crm';
 
 export function useActivities(leadId?: string) {
@@ -9,6 +11,17 @@ export function useActivities(leadId?: string) {
     queryKey: leadId ? ['activities', leadId] : ['activities'],
     queryFn: () => leadId ? api.getActivitiesByLead(leadId) : api.getActivities(),
   });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('activities-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'activities' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['activities'] });
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [queryClient]);
 
   const addActivityMutation = useMutation({
     mutationFn: (activity: Omit<Activity, 'id'>) =>

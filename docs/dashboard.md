@@ -2,7 +2,7 @@
 
 > KPI stat cards, charts (lead funnel, weekly activity, revenue pipeline), and team leaderboard.
 
-**Status:** Partial (some chart data is hardcoded)
+**Status:** Active
 **Last Updated:** 2026-03-23
 **Related Docs:** [OVERVIEW.md](./OVERVIEW.md) | [state-management.md](./state-management.md) | [leads.md](./leads.md) | [pipeline.md](./pipeline.md)
 
@@ -38,7 +38,7 @@ The Dashboard is the landing page after login (`/`). It provides a KPI overview 
 | Conversion Rate | `leads` array | `(warmLeads / totalLeads * 100).toFixed(1)` — where warm = `status === 'warm'` |
 | Pipeline Value | `deals` array | `myDeals.filter(stage !== 'closed_lost').reduce(sum values)` — formatted as `$Xk` |
 
-Each card also shows a **% change indicator** (e.g., "+12%", "+8%") — these are **hardcoded strings**, not computed from historical data.
+The **% change indicators** (e.g., "+12%", "+8%") that previously appeared on each stat card have been **removed** — they were hardcoded strings, not computed from historical data, and have been eliminated in Phase B.
 
 **Layout:** 2 columns on mobile, 5 columns on large screens (`grid-cols-2 lg:grid-cols-5`)
 
@@ -52,15 +52,16 @@ Each card also shows a **% change indicator** (e.g., "+12%", "+8%") — these ar
 
 #### 2. Weekly Activity (Bar Chart)
 - **Type:** `BarChart` with two bar series
-- **Data:** **HARDCODED** — `[Mon:3/5, Tue:5/4, Wed:2/7, Thu:6/3, Fri:4/6]` (calls/emails)
+- **Data:** **Computed from real activities** — the last 7 days of activity records are bucketed by day-of-week; each bucket counts `type === 'call'` vs `type === 'email_sent'` activities
 - **Colors:** Primary blue (calls), lighter blue (emails)
-- **Note:** This does NOT reflect actual activity data from the CRM context
+- **Note:** Chart automatically reflects the current user's (or all users', for admins) actual activity records from Supabase
 
 #### 3. Revenue Pipeline (Line Chart)
 - **Type:** `LineChart` with CartesianGrid
-- **Data:** **PARTIALLY HARDCODED** — Oct through Feb values are hardcoded ($12k→$45k); March value is the live `pipelineValue`
+- **Data:** **Computed from real deals** — the last 6 calendar months of deal records are bucketed by `created_at` month; each bucket sums the `value` of non-`closed_lost` deals to produce the revenue figure for that month
 - **Y-axis:** Formatted as `$Xk`
 - **Color:** Primary blue with dot markers
+- **Note:** Fully dynamic — no hardcoded month values remain
 
 ### Team Leaderboard (Admin Only)
 
@@ -121,13 +122,9 @@ const myDeals = isAdmin ? deals : deals.filter(d => d.assignedTo === user?.id);
 
 ## Known Limitations & TODOs
 
-- Weekly Activity chart data is still hardcoded sample values, not computed from actual activity records
 - Leaderboard only visible to admins (employees don't see team performance)
-- % change indicators on stat cards are decorative strings
-- Revenue data for Oct–Feb is hardcoded
 - No date range selector or time period filtering
 - No drill-down from stats to detailed views
-- No refresh/real-time update mechanism
 - No mobile-optimized chart rendering
 - Missing chart: no deal stage distribution visualization
 
@@ -135,7 +132,6 @@ const myDeals = isAdmin ? deals : deals.filter(d => d.assignedTo === user?.id);
 
 ## Future Considerations
 
-- Replace hardcoded chart data with computed values from activities/deals
 - Add date range picker for filtering dashboard metrics
 - Make leaderboard dynamic based on all employees
 - Add click-through from stats to filtered views (e.g., click "Calls Made" → filtered activity list)
@@ -150,3 +146,4 @@ const myDeals = isAdmin ? deals : deals.filter(d => d.assignedTo === user?.id);
 | 2026-03-22 | Initial documentation created | — |
 | 2026-03-23 | Data from Supabase via React Query hooks, leaderboard now fully dynamic | `DashboardPage.tsx` |
 | 2026-03-23 | "Hottest Leads" engagement leaderboard added — ranks leads by engagement score (opens×1 + clicks×3 + replies×5), visible to all roles | `DashboardPage.tsx` |
+| 2026-03-23 | Dashboard charts use real data: weekly activity from activities, revenue from deals. Fake % badges removed. | `DashboardPage.tsx` |

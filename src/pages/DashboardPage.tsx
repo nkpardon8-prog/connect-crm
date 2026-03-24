@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useLeads } from '@/hooks/use-leads';
 import { useActivities } from '@/hooks/use-activities';
 import { useDeals } from '@/hooks/use-deals';
@@ -5,7 +6,7 @@ import { useProfiles } from '@/hooks/use-profiles';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Users, Phone, Mail, TrendingUp, DollarSign, ArrowUpRight } from 'lucide-react';
+import { Users, Phone, Mail, TrendingUp, DollarSign } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts';
 import EngagementLeaderboard from '@/components/campaigns/EngagementLeaderboard';
 
@@ -23,14 +24,6 @@ export default function DashboardPage() {
   const { profiles } = useProfiles();
   const { user, isAdmin } = useAuth();
 
-  if (leadsLoading || activitiesLoading || dealsLoading) {
-    return (
-      <div className="p-6 flex items-center justify-center min-h-[50vh]">
-        <div className="text-sm text-muted-foreground">Loading...</div>
-      </div>
-    );
-  }
-
   const totalLeads = leads.length;
   const callsMade = activities.filter(a => a.type === 'call').length;
   const emailsSent = activities.filter(a => a.type === 'email_sent').length;
@@ -45,30 +38,59 @@ export default function DashboardPage() {
     { name: 'Dead', value: leads.filter(l => l.status === 'dead').length },
   ];
 
-  const weeklyActivity = [
-    { day: 'Mon', calls: 3, emails: 5 },
-    { day: 'Tue', calls: 5, emails: 4 },
-    { day: 'Wed', calls: 2, emails: 7 },
-    { day: 'Thu', calls: 6, emails: 3 },
-    { day: 'Fri', calls: 4, emails: 6 },
-  ];
+  const weeklyActivity = useMemo(() => {
+    const now = new Date();
+    const result = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const dayStr = d.toISOString().split('T')[0];
+      const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+      const dayActivities = activities.filter(a => a.timestamp.startsWith(dayStr));
+      result.push({
+        day: dayName,
+        calls: dayActivities.filter(a => a.type === 'call').length,
+        emails: dayActivities.filter(a => a.type === 'email_sent').length,
+      });
+    }
+    return result;
+  }, [activities]);
 
-  const revenueData = [
-    { month: 'Oct', value: 12000 },
-    { month: 'Nov', value: 18000 },
-    { month: 'Dec', value: 24000 },
-    { month: 'Jan', value: 32000 },
-    { month: 'Feb', value: 45000 },
-    { month: 'Mar', value: pipelineValue },
-  ];
+  const revenueData = useMemo(() => {
+    const months = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthStr = d.toLocaleString('en-US', { month: 'short' });
+      const monthStart = new Date(d.getFullYear(), d.getMonth(), 1);
+      const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
+      const monthDeals = deals.filter(deal => {
+        const created = new Date(deal.createdAt);
+        return created >= monthStart && created <= monthEnd && deal.stage !== 'closed_lost';
+      });
+      months.push({
+        month: monthStr,
+        value: monthDeals.reduce((sum, d) => sum + d.value, 0),
+      });
+    }
+    return months;
+  }, [deals]);
 
   const stats = [
-    { label: 'Total Leads', value: totalLeads, icon: Users, change: '+12%' },
-    { label: 'Calls Made', value: callsMade, icon: Phone, change: '+8%' },
-    { label: 'Emails Sent', value: emailsSent, icon: Mail, change: '+23%' },
-    { label: 'Conversion Rate', value: `${conversionRate}%`, icon: TrendingUp, change: '+4.2%' },
-    { label: 'Pipeline Value', value: `$${(pipelineValue / 1000).toFixed(0)}k`, icon: DollarSign, change: '+18%' },
+    { label: 'Total Leads', value: totalLeads, icon: Users },
+    { label: 'Calls Made', value: callsMade, icon: Phone },
+    { label: 'Emails Sent', value: emailsSent, icon: Mail },
+    { label: 'Conversion Rate', value: `${conversionRate}%`, icon: TrendingUp },
+    { label: 'Pipeline Value', value: `$${(pipelineValue / 1000).toFixed(0)}k`, icon: DollarSign },
   ];
+
+  if (leadsLoading || activitiesLoading || dealsLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[50vh]">
+        <div className="text-sm text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6 max-w-[1400px]">
@@ -86,11 +108,8 @@ export default function DashboardPage() {
         {stats.map(s => (
           <Card key={s.label} className="border shadow-sm">
             <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center mb-2">
                 <s.icon className="h-4 w-4 text-muted-foreground" />
-                <span className="text-xs text-emerald-600 font-medium flex items-center gap-0.5">
-                  <ArrowUpRight className="h-3 w-3" />{s.change}
-                </span>
               </div>
               <p className="text-2xl font-semibold text-foreground">{s.value}</p>
               <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>

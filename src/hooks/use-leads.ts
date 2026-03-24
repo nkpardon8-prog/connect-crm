@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '@/lib/api/leads';
+import { supabase } from '@/lib/supabase';
 import type { Lead } from '@/types/crm';
 
 export function useLeads() {
@@ -9,6 +11,17 @@ export function useLeads() {
     queryKey: ['leads'],
     queryFn: api.getLeads,
   });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('leads-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['leads'] });
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [queryClient]);
 
   const updateLeadMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Lead> }) =>
