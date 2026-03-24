@@ -361,7 +361,14 @@ export default function LeadDetailPage() {
                           <Icon className="h-3.5 w-3.5 text-muted-foreground" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm text-foreground">{act.description}</p>
+                          {act.metadata?.threadId ? (
+                            <button onClick={() => navigate(`/outreach?thread=${encodeURIComponent(act.metadata!.threadId)}`)}
+                              className="text-sm text-primary hover:underline text-left">
+                              {act.description}
+                            </button>
+                          ) : (
+                            <p className="text-sm text-foreground">{act.description}</p>
+                          )}
                           <div className="flex items-center gap-2 mt-1">
                             <Clock className="h-3 w-3 text-muted-foreground" />
                             <span className="text-xs text-muted-foreground">

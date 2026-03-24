@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useMemo, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLeads } from '@/hooks/use-leads';
 import { useEmails } from '@/hooks/use-emails';
@@ -33,6 +33,7 @@ interface EmailThread {
 
 export default function OutreachPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { emails, addEmail, addEmailAsync, markEmailRead, isLoading: emailsLoading, isFetching } = useEmails();
   const { leads } = useLeads();
   const emailSafeLeads = useMemo(() =>
@@ -63,6 +64,14 @@ export default function OutreachPage() {
   const [body, setBody] = useState('');
   const [toEmail, setToEmail] = useState('');
 
+
+  useEffect(() => {
+    const threadParam = searchParams.get('thread')
+    if (threadParam) {
+      setSelectedThreadId(threadParam)
+      setTab('inbox')
+    }
+  }, [searchParams])
 
   // Build threads from emails
   const threads = useMemo<EmailThread[]>(() => {

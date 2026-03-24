@@ -327,6 +327,23 @@ Deno.serve(async (req) => {
               .in('id', variantBIds)
           }
 
+          // Create activity records for sent emails
+          try {
+            const activityRows = batchEnrollments
+              .filter(e => e.lead_id)
+              .map((e, j) => ({
+                lead_id: e.lead_id,
+                user_id: campaign.sent_by,
+                type: 'email_sent',
+                description: `Campaign email sent: "${resendEmails[i + j]?.subject || campaign.subject}"`,
+                timestamp: new Date().toISOString(),
+                metadata: { campaignId: campaign.id, threadId: `t-camp-${campaign.id}-${e.lead_id || e.id}` },
+              }))
+            if (activityRows.length > 0) {
+              await supabaseAdmin.from('activities').insert(activityRows)
+            }
+          } catch (e) { console.error('Activity creation failed:', e) }
+
           // Update daily send count
           if (!campaign.send_spacing) {
             // Only increment here if not spacing (spacing claims budget upfront)
@@ -484,6 +501,20 @@ Deno.serve(async (req) => {
           campaign_id: campaign.id,
           provider_message_id: providerMessageId,
         })
+
+        // Create activity record for drip email
+        try {
+          if (enrollment.lead_id) {
+            await supabaseAdmin.from('activities').insert({
+              lead_id: enrollment.lead_id,
+              user_id: campaign.sent_by,
+              type: 'email_sent',
+              description: `Campaign email sent: "${emailSubject}"`,
+              timestamp: new Date().toISOString(),
+              metadata: { campaignId: campaign.id, threadId: `t-camp-${campaign.id}-${enrollment.lead_id || enrollment.id}` },
+            })
+          }
+        } catch (e) { console.error('Drip activity creation failed:', e) }
 
         // Check if more steps exist
         const { data: nextStep } = await supabaseAdmin
