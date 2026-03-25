@@ -23,7 +23,7 @@
 - **Path alias:** `@` maps to `./src`
 - **Dev server:** Port 8080, HMR overlay disabled
 - **Testing:** Vitest + Testing Library + Playwright (minimal test coverage — `src/test/example.test.ts`)
-- **Origin:** Scaffolded via Lovable (`lovable-tagger` dev dependency, `.lovable/` directory)
+- **Origin:** Scaffolded as a Vite + React + TypeScript SPA
 
 **Current limitations:**
 - No backend, no API calls, no database — 100% client-side with mock data

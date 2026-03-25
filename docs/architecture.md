@@ -76,7 +76,7 @@ IntegrateAPI CRM is a single-page application (SPA) backed by Supabase. It is bu
     port: 8080,        // Dev server port
     hmr: { overlay: false }  // No HMR error overlay
   },
-  plugins: [react(), componentTagger()],  // componentTagger is Lovable integration (dev only)
+  plugins: [react()],
   resolve: {
     alias: { "@": "./src" }  // Path alias: @/ → src/
   }
@@ -166,7 +166,7 @@ All authenticated routes are children of `<AppLayout />` (which provides sidebar
 ## Known Limitations & TODOs
 
 - `App.css` contains unused Vite boilerplate — can be removed
-- `Index.tsx` is a Lovable placeholder page — unused since Dashboard is at `/`
+- `Index.tsx` is an unused placeholder page — Dashboard is the root route at `/`
 - No CI/CD configuration
 - No Docker/containerization
 - Minimal test coverage (single example test)

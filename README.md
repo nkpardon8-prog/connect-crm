@@ -1,3 +1,3 @@
-# Welcome to your Lovable project
+# Connect CRM
 
 TODO: Document your project here
