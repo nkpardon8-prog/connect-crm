@@ -50,16 +50,16 @@ Deno.serve(async (req) => {
       return errorResponse(500, createErr.message)
     }
 
-    // Set sending_email on profile (trigger is synchronous — profile should exist)
+    // Set email_prefix on profile (trigger is synchronous — profile should exist)
     // Retry once if trigger hasn't fired yet
     const { error: updateErr } = await supabaseAdmin.from('profiles')
-      .update({ sending_email: invite.email })
+      .update({ email_prefix: invite.email.split('@')[0] })
       .eq('id', newUser.user.id)
 
     if (updateErr) {
       await new Promise(r => setTimeout(r, 500))
       await supabaseAdmin.from('profiles')
-        .update({ sending_email: invite.email })
+        .update({ email_prefix: invite.email.split('@')[0] })
         .eq('id', newUser.user.id)
     }
 

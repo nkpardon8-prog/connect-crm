@@ -26,13 +26,13 @@ export async function getProfile(id: string): Promise<User | null> {
   return toCamelCase<User>(data);
 }
 
-export async function updateProfile(id: string, updates: Partial<Pick<User, 'name' | 'avatar' | 'sendingEmail'>>) {
+export async function updateProfile(id: string, updates: Partial<Pick<User, 'name' | 'avatar' | 'emailPrefix'>>) {
   const { error } = await supabase
     .from('profiles')
     .update({
       ...(updates.name !== undefined && { name: updates.name }),
       ...(updates.avatar !== undefined && { avatar: updates.avatar }),
-      ...(updates.sendingEmail !== undefined && { sending_email: updates.sendingEmail }),
+      ...(updates.emailPrefix !== undefined && { email_prefix: updates.emailPrefix }),
     })
     .eq('id', id);
 

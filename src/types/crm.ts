@@ -6,7 +6,7 @@ export interface User {
   email: string;
   role: UserRole;
   avatar?: string;
-  sendingEmail?: string;
+  emailPrefix?: string;
 }
 
 export type LeadStatus = 'cold' | 'lukewarm' | 'warm' | 'dead';

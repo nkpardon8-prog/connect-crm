@@ -249,7 +249,7 @@ Track all significant changes here: new features, architectural shifts, new rout
 | 2026-03-23 | Campaign AI wired to real LLM via Supabase Edge Function | Outreach | CampaignAIChat calls DeepSeek V3.2 via OpenRouter, replaces keyword matching |
 | 2026-03-23 | Apollo.io integration — real lead search + enrichment in Lead Generator | Lead Generator | Edge Function, LLM parsing, circuit breakers, enriched results table |
 | 2026-03-23 | Apollo search Edge Function, email_status on leads, profile editing with sending email, campaign email filtering | Lead Generator, Settings, Outreach | Real Apollo search/enrichment/ZeroBounce, profile name+email editable, campaigns filtered by email verification |
-| 2026-03-23 | Resend email integration — real email delivery for compose/reply/campaigns, bounce/open/click tracking webhooks | Outreach | Emails sent via Resend API, tracking via webhooks, sendingEmail required on profiles |
+| 2026-03-23 | Resend email integration — real email delivery for compose/reply/campaigns, bounce/open/click tracking webhooks | Outreach | Emails sent via Resend API, tracking via webhooks, emailPrefix required on profiles |
 | 2026-03-23 | Inbound email receiving — replies appear in CRM inbox via Resend webhook | Outreach | email-events handles email.received, thread matching via In-Reply-To, lead matching, activity logging |
 | 2026-03-23 | Email status badges on leads + email tracking indicators in inbox | Leads, Outreach | Leads table/detail show verification status, inbox shows open/click/bounce tracking |
 | 2026-03-23 | Email UI redesign — Gmail-style message cards, formatting toolbar, flexible To field | Outreach | Messages display as email cards with From/To headers, compose accepts raw email addresses |

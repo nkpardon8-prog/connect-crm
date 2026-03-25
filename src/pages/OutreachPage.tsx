@@ -145,7 +145,7 @@ export default function OutreachPage() {
 
   const handleSendReply = async () => {
     if (!selectedThread || !replyBody.trim()) return;
-    if (!user?.sendingEmail) {
+    if (!user?.emailPrefix) {
       toast.error('Set your sending email in Settings before sending');
       return;
     }
@@ -165,7 +165,7 @@ export default function OutreachPage() {
     try {
       await sendEmail({
         leadId: selectedThread.leadId,
-        from: user.sendingEmail,
+        from: `${user.emailPrefix}@integrateapi.ai`,
         fromName: user.name,
         to: toAddress,
         subject: newSubject,
@@ -196,7 +196,7 @@ export default function OutreachPage() {
       ? leads.find(l => l.id === toLeadId)?.email
       : toEmail;
     if (!recipientEmail || !subject.trim() || !body.trim()) return;
-    if (!user?.sendingEmail) {
+    if (!user?.emailPrefix) {
       toast.error('Set your sending email in Settings before sending');
       return;
     }
@@ -204,7 +204,7 @@ export default function OutreachPage() {
     try {
       await sendEmail({
         leadId: toLeadId || undefined,
-        from: user.sendingEmail,
+        from: `${user.emailPrefix}@integrateapi.ai`,
         fromName: user.name,
         to: recipientEmail,
         subject: subject.trim(),
@@ -413,7 +413,7 @@ export default function OutreachPage() {
                                 <div className="text-xs">
                                   <span className="text-muted-foreground">From: </span>
                                   <span className="font-medium text-foreground">
-                                    {isSent ? `${user?.name ?? ''} <${user?.sendingEmail ?? msg.from}>`.trim() : msg.from}
+                                    {isSent ? `${user?.name ?? ''} <${msg.from}>`.trim() : msg.from}
                                   </span>
                                 </div>
                                 <span className="text-[11px] text-muted-foreground">

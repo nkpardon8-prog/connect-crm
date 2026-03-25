@@ -12,7 +12,7 @@ export function useProfiles() {
   });
 
   const updateProfileMutation = useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Partial<Pick<User, 'name' | 'avatar' | 'sendingEmail'>> }) =>
+    mutationFn: ({ id, updates }: { id: string; updates: Partial<Pick<User, 'name' | 'avatar' | 'emailPrefix'>> }) =>
       api.updateProfile(id, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
@@ -30,7 +30,7 @@ export function useProfiles() {
     profiles,
     isLoading,
     error,
-    updateProfile: (id: string, updates: Partial<Pick<User, 'name' | 'avatar' | 'sendingEmail'>>) =>
+    updateProfile: (id: string, updates: Partial<Pick<User, 'name' | 'avatar' | 'emailPrefix'>>) =>
       updateProfileMutation.mutateAsync({ id, updates }),
     deleteMember: (userId: string) => deleteMemberMutation.mutateAsync(userId),
   };

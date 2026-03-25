@@ -103,7 +103,7 @@ export default function CampaignBuilderPage() {
   const canProceedStep2 = subject.trim() && body.trim();
 
   const handleSend = async () => {
-    if (!user?.sendingEmail) {
+    if (!user?.emailPrefix) {
       toast.error('Set your sending email in Settings before sending');
       return;
     }
@@ -344,7 +344,7 @@ export default function CampaignBuilderPage() {
               <CardContent className="p-4 space-y-3">
                 <div className="text-xs">
                   <span className="text-muted-foreground">From: </span>
-                  <span className="font-medium">{user?.name} &lt;{user?.sendingEmail || 'not set'}&gt;</span>
+                  <span className="font-medium">{user?.name} &lt;{user?.emailPrefix ? `${user.emailPrefix}@mail.integrateapi.ai` : 'not set'}&gt;</span>
                 </div>
                 <div className="text-xs">
                   <span className="text-muted-foreground">To: </span>
@@ -360,7 +360,7 @@ export default function CampaignBuilderPage() {
             </Card>
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>This email will be sent to <strong>{selectedLeadIds.size}</strong> recipients</span>
-              {!user?.sendingEmail && <Badge variant="destructive" className="text-[10px]">Set sending email in Settings</Badge>}
+              {!user?.emailPrefix && <Badge variant="destructive" className="text-[10px]">Set sending email in Settings</Badge>}
             </div>
             <div className="flex justify-between">
               <Button variant="outline" onClick={() => setStep(2)} className="gap-1.5">
@@ -396,7 +396,7 @@ export default function CampaignBuilderPage() {
               </div>
               <div>
                 <p className="text-muted-foreground text-xs">From</p>
-                <p className="font-medium">{user?.sendingEmail || 'Not set'}</p>
+                <p className="font-medium">{user?.emailPrefix ? `${user.emailPrefix}@mail.integrateapi.ai` : 'Not set'}</p>
               </div>
             </div>
             <div className="flex items-center gap-3 flex-wrap mb-4">
@@ -463,7 +463,7 @@ export default function CampaignBuilderPage() {
                   <Save className="h-3.5 w-3.5" /> Save as Draft
                 </Button>
               </div>
-              <Button onClick={handleSend} disabled={sending || !user?.sendingEmail} className="gap-1.5">
+              <Button onClick={handleSend} disabled={sending || !user?.emailPrefix} className="gap-1.5">
                 <Send className="h-3.5 w-3.5" /> {sending ? 'Sending...' : sendMode === 'schedule' ? `Schedule for ${selectedLeadIds.size} Recipients` : `Send to ${selectedLeadIds.size} Recipients`}
               </Button>
             </div>

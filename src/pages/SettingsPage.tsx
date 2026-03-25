@@ -21,7 +21,7 @@ export default function SettingsPage() {
   const queryClient = useQueryClient();
 
   const [editName, setEditName] = useState(user?.name || '');
-  const [editSendingEmail, setEditSendingEmail] = useState(user?.sendingEmail || '');
+  const [editPrefix, setEditPrefix] = useState(user?.emailPrefix || '');
   const [saving, setSaving] = useState(false);
 
   // Invite state
@@ -89,7 +89,7 @@ export default function SettingsPage() {
     if (!user) return;
     setSaving(true);
     try {
-      await updateProfile(user.id, { name: editName, sendingEmail: editSendingEmail });
+      await updateProfile(user.id, { name: editName, emailPrefix: editPrefix });
       await refreshUser();
       toast.success('Profile updated');
     } catch {
@@ -127,13 +127,22 @@ export default function SettingsPage() {
             </div>
           </div>
           <div className="space-y-2">
-            <Label className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Sending Email</Label>
-            <Input
-              placeholder="e.g., sarah@mail.integrateapi.ai"
-              value={editSendingEmail}
-              onChange={e => setEditSendingEmail(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">Used as the "from" address when sending emails from this CRM</p>
+            <Label className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Email Prefix</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="e.g., nick"
+                value={editPrefix}
+                onChange={e => setEditPrefix(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
+                className="max-w-[200px]"
+              />
+              <span className="text-sm text-muted-foreground">@integrateapi.ai</span>
+            </div>
+            {editPrefix && (
+              <div className="text-xs text-muted-foreground space-y-0.5">
+                <p>Compose & replies: <span className="text-foreground">{editPrefix}@integrateapi.ai</span></p>
+                <p>Campaign sends: <span className="text-foreground">{editPrefix}@mail.integrateapi.ai</span></p>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Label>Role</Label>

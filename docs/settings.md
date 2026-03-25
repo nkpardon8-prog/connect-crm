@@ -28,7 +28,7 @@ The Settings page (`/settings`) provides three sections: an editable user profil
 
 - **Name:** Editable `Input` pre-filled with `user.name` — bound to `editName` state
 - **Email:** Read-only `Input` pre-filled with `user.email` — this is the Supabase Auth email and cannot be changed here
-- **Sending Email:** Editable `Input` for the CRM outbound address used when sending emails — bound to `editSendingEmail` state. Separate from the auth email. **This field is required before users can send any email** (compose, reply, or campaign). If `sendingEmail` is not set on the user's profile, send actions are blocked and an error message is shown prompting the user to configure it in Settings first.
+- **Sending Email:** Editable `Input` for the CRM outbound address used when sending emails — bound to `editEmailPrefix` state. Separate from the auth email. **This field is required before users can send any email** (compose, reply, or campaign). If `emailPrefix` is not set on the user's profile, send actions are blocked and an error message is shown prompting the user to configure it in Settings first.
 - **Role:** `Badge` showing capitalized role (admin/employee)
 - **Save Changes button:** Calls `handleSave()`, shows a loading state (`saving`) while the Supabase write is in flight. On success, calls `refreshUser()` so the header and rest of the UI reflect the updated name immediately.
 
@@ -79,7 +79,7 @@ Available to all users (both admin and employee).
 | Integration | Description | Status |
 |-------------|-------------|--------|
 | Apollo.io | Lead generation and enrichment | Connected |
-| Email Provider | Outbound email via Resend (sending_email configurable in profile) | Setting Up |
+| Email Provider | Outbound email via Resend (email_prefix configurable in profile) | Setting Up |
 | Slack | Get notifications in your Slack workspace | Coming Soon |
 
 Each integration row shows:
@@ -101,7 +101,7 @@ No connection/configuration flow exists.
 | State | Type | Purpose |
 |-------|------|---------|
 | `editName` | `string` | Controlled value for the Name input, initialized from `user.name` |
-| `editSendingEmail` | `string` | Controlled value for the Sending Email input, initialized from `user.sendingEmail` |
+| `editEmailPrefix` | `string` | Controlled value for the Sending Email input, initialized from `user.emailPrefix` |
 | `saving` | `boolean` | `true` while the Supabase updateProfile write is in flight |
 | `inviteOpen` | `boolean` | Controls visibility of the invite dialog |
 | `inviteName` | `string` | Controlled value for the Name field in the invite dialog |
@@ -113,7 +113,7 @@ No connection/configuration flow exists.
 | `deleting` | `boolean` | `true` while the `delete-member` call is in flight |
 
 **Functions:**
-- `handleSave()` — sets `saving` to `true`, calls `updateProfile({ name: editName, sendingEmail: editSendingEmail })`, then calls `refreshUser()` so the global user state reflects the change, then sets `saving` to `false`
+- `handleSave()` — sets `saving` to `true`, calls `updateProfile({ name: editName, emailPrefix: editEmailPrefix })`, then calls `refreshUser()` so the global user state reflects the change, then sets `saving` to `false`
 - `handleInvite()` — calls the `create-invite` Edge Function with `{ name: inviteName, email: inviteEmail, role: inviteRole }`, stores the returned invite link in `inviteLink` state for the admin to copy
 - `handleDeleteConfirm()` — calls the `delete-member` Edge Function with `{ userId: deleteTarget.id }`, then clears `deleteTarget` and triggers a profiles refetch
 
@@ -175,5 +175,5 @@ No connection/configuration flow exists.
 | 2026-03-22 | Initial documentation created | — |
 | 2026-03-23 | Team management uses real profiles from Supabase | `SettingsPage.tsx` |
 | 2026-03-23 | Profile editing: name and sending email are now editable with save | `SettingsPage.tsx` |
-| 2026-03-23 | sendingEmail required for email sending — users must set it before compose/reply/campaign | `SettingsPage.tsx` |
+| 2026-03-23 | emailPrefix required for email sending — users must set it before compose/reply/campaign | `SettingsPage.tsx` |
 | 2026-03-23 | Team management: "+ Add Team Member" opens invite dialog; Trash button opens confirmation dialog and calls delete-member Edge Function | `SettingsPage.tsx` |

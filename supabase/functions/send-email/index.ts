@@ -2,6 +2,8 @@ import { corsHeaders } from '../_shared/cors.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { writeAlert } from '../_shared/alerts.ts'
 
+const EMAIL_DOMAIN = 'integrateapi.ai'
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -33,7 +35,7 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    // Authenticate user and validate sending_email
+    // Authenticate user and validate email_prefix
     const jwt = authHeader.replace('Bearer ', '')
     const { data: { user: authUser } } = await supabaseAdmin.auth.getUser(jwt)
     if (!authUser) {
@@ -45,18 +47,18 @@ Deno.serve(async (req) => {
 
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('sending_email, name')
+      .select('email_prefix, name')
       .eq('id', authUser.id)
       .single()
 
-    if (!profile?.sending_email) {
+    if (!profile?.email_prefix) {
       return new Response(
         JSON.stringify({ error: 'Sending email not configured. Set it in Settings.' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
 
-    const validFrom = profile.sending_email
+    const validFrom = `${profile.email_prefix}@${EMAIL_DOMAIN}`
     const senderName = profile.name
 
     // Helper: get threading headers for replies

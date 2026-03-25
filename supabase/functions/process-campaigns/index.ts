@@ -2,6 +2,9 @@ import { corsHeaders } from '../_shared/cors.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { writeAlert } from '../_shared/alerts.ts'
 
+const EMAIL_DOMAIN = 'integrateapi.ai'
+const CAMPAIGN_DOMAIN = 'mail.integrateapi.ai'
+
 function applyMergeFields(text: string, data: {
   first_name?: string; last_name?: string; company?: string;
   job_title?: string; industry?: string; location?: string;
@@ -148,12 +151,12 @@ Deno.serve(async (req) => {
 
       // Get sender profile
       const { data: profile } = await supabaseAdmin.from('profiles')
-        .select('name, sending_email')
+        .select('name, email_prefix')
         .eq('id', campaign.sent_by)
         .single()
 
-      if (!profile?.sending_email) {
-        console.error(`Campaign ${campaign.id}: sender has no sending_email`)
+      if (!profile?.email_prefix) {
+        console.error(`Campaign ${campaign.id}: sender has no email_prefix`)
         continue
       }
 
@@ -270,7 +273,8 @@ Deno.serve(async (req) => {
         }
 
         return {
-          from: `${profile.name} <${profile.sending_email}>`,
+          from: `${profile.name} <${profile.email_prefix}@${CAMPAIGN_DOMAIN}>`,
+          headers: { 'Reply-To': `${profile.name} <${profile.email_prefix}@${EMAIL_DOMAIN}>` },
           to: [e.email],
           subject: emailSubject,
           text: emailBody,
@@ -299,7 +303,7 @@ Deno.serve(async (req) => {
             const sentEmail = resendEmails[i + j]
             return {
             lead_id: e.lead_id,
-            from: profile.sending_email,
+            from: `${profile.email_prefix}@${CAMPAIGN_DOMAIN}`,
             to: e.email,
             subject: sentEmail?.subject || campaign.subject,
             body: sentEmail?.text || campaign.body,
@@ -441,8 +445,8 @@ Deno.serve(async (req) => {
 
       // Fetch sender profile
       const { data: profile } = await supabaseAdmin.from('profiles')
-        .select('name, sending_email').eq('id', campaign.sent_by).single()
-      if (!profile?.sending_email) continue
+        .select('name, email_prefix').eq('id', campaign.sent_by).single()
+      if (!profile?.email_prefix) continue
 
       // Fetch lead data for merge fields
       let lead: { first_name: string; last_name: string; email: string; phone: string; job_title: string; company: string; industry: string; location: string; email_status: string | null } | null = null
@@ -477,7 +481,8 @@ Deno.serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: `${profile.name} <${profile.sending_email}>`,
+          from: `${profile.name} <${profile.email_prefix}@${CAMPAIGN_DOMAIN}>`,
+          headers: { 'Reply-To': `${profile.name} <${profile.email_prefix}@${EMAIL_DOMAIN}>` },
           to: [enrollment.email],
           subject: emailSubject,
           text: emailBody,
@@ -490,7 +495,7 @@ Deno.serve(async (req) => {
         // Insert email record
         await supabaseAdmin.from('emails').insert({
           lead_id: enrollment.lead_id,
-          from: profile.sending_email,
+          from: `${profile.email_prefix}@${CAMPAIGN_DOMAIN}`,
           to: enrollment.email,
           subject: emailSubject,
           body: emailBody,

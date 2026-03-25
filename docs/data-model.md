@@ -36,7 +36,7 @@ interface User {
   email: string;
   role: UserRole;       // 'admin' | 'employee'
   avatar?: string;      // Optional avatar URL (unused in mock data)
-  sendingEmail?: string; // CRM outbound email address (editable in Settings)
+  emailPrefix?: string;  // CRM outbound email prefix (editable in Settings)
 }
 ```
 
@@ -288,4 +288,4 @@ EmailSequence
 |------|--------|----------------|
 | 2026-03-22 | Initial documentation created | — |
 | 2026-03-22 | Types now backed by Supabase database tables | `src/types/database.ts` |
-| 2026-03-23 | Added Lead.emailStatus and User.sendingEmail fields | `crm.ts` |
+| 2026-03-23 | Added Lead.emailStatus and User.emailPrefix fields | `crm.ts` |

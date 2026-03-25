@@ -40,7 +40,7 @@ Extends `auth.users`. Auto-created via trigger on user signup.
 | email | text | NOT NULL, UNIQUE | — |
 | role | text | NOT NULL, CHECK (admin, employee) | 'employee' |
 | avatar | text | — | NULL |
-| sending_email | text | — | NULL |
+| email_prefix | text | — | NULL |
 | created_at | timestamptz | NOT NULL | now() |
 | updated_at | timestamptz | NOT NULL | now() (auto-updated) |
 
@@ -551,7 +551,7 @@ The `process-campaigns` cron job is then registered as described in its Edge Fun
 | 2026-03-22 | Initial schema: 9 tables, RLS, triggers, realtime, seed data | All migrations |
 | 2026-03-23 | Added Edge Functions section documenting campaign-ai | supabase/functions/ |
 | 2026-03-23 | Added apollo_usage table for circuit breaker tracking | Migration 005 |
-| 2026-03-23 | Added email_status to leads, sending_email to profiles, apollo_usage RLS, apollo-search Edge Function | leads, profiles, apollo_usage, supabase/functions/ |
+| 2026-03-23 | Added email_status to leads, email_prefix to profiles, apollo_usage RLS, apollo-search Edge Function | leads, profiles, apollo_usage, supabase/functions/ |
 | 2026-03-23 | Added email tracking columns (provider_message_id, opened_at, clicked_at, bounced_at), send-email and email-events Edge Functions | emails table, supabase/functions/ |
 | 2026-03-23 | email-events Edge Function now handles inbound email (email.received) | supabase/functions/email-events/ |
 | 2026-03-23 | Team management: invites table, create-invite / signup-with-token / delete-member Edge Functions, FK changes (leads.assigned_to, deals.assigned_to now ON DELETE SET NULL) | invites table, supabase/functions/ |
