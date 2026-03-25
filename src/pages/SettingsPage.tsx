@@ -116,15 +116,9 @@ export default function SettingsPage() {
           <CardTitle className="text-base flex items-center gap-2"><User className="h-4 w-4" /> Profile</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Name</Label>
-              <Input value={editName} onChange={e => setEditName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input defaultValue={user?.email} readOnly />
-            </div>
+          <div className="space-y-2">
+            <Label>Name</Label>
+            <Input value={editName} onChange={e => setEditName(e.target.value)} />
           </div>
           <div className="space-y-2">
             <Label className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Email Prefix</Label>
