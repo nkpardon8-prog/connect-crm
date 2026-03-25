@@ -224,27 +224,27 @@ Deno.serve(async (req) => {
 
       if (enrollments.length === 0) continue
 
-      // Send spacing: stagger emails across 8 hours
-      if (campaign.send_spacing && enrollments.length > 1) {
-        const SEND_WINDOW_MS = 8 * 60 * 60 * 1000 // 8 hours
-        const intervalMs = Math.floor(SEND_WINDOW_MS / enrollments.length)
-        const randomJitter = () => Math.floor(Math.random() * 120000) - 60000 // ±1 min
+      // Send spacing: only space fresh enrollments, send due ones normally
+      if (campaign.send_spacing) {
+        const fresh = enrollments.filter(e => !e.next_send_at)
+        const due = enrollments.filter(e => e.next_send_at)
 
-        // Defer all except the first enrollment
-        for (let j = 1; j < enrollments.length; j++) {
-          const sendAt = new Date(Date.now() + (j * intervalMs) + randomJitter())
-          await supabaseAdmin.from('campaign_enrollments')
-            .update({ next_send_at: sendAt.toISOString() })
-            .eq('id', enrollments[j].id)
+        if (fresh.length > 1) {
+          const SEND_WINDOW_MS = 8 * 60 * 60 * 1000 // 8 hours
+          const intervalMs = Math.floor(SEND_WINDOW_MS / fresh.length)
+          const randomJitter = () => Math.floor(Math.random() * 120000) - 60000 // ±1 min
+
+          for (let j = 1; j < fresh.length; j++) {
+            const sendAt = new Date(Date.now() + (j * intervalMs) + randomJitter())
+            await supabaseAdmin.from('campaign_enrollments')
+              .update({ next_send_at: sendAt.toISOString() })
+              .eq('id', fresh[j].id)
+          }
+          console.log(`Spacing: deferred ${fresh.length - 1} fresh emails across ${SEND_WINDOW_MS / 3600000}h`)
+
+          // Keep first fresh + all due enrollments for immediate send
+          enrollments = [fresh[0], ...due]
         }
-        console.log(`Spacing: deferred ${enrollments.length - 1} emails across ${SEND_WINDOW_MS / 3600000}h`)
-
-        // Claim full batch from budget (even though most are deferred)
-        remainingBudget -= enrollments.length
-        todaySent += enrollments.length
-
-        // Only keep first enrollment for immediate send
-        enrollments = [enrollments[0]]
       }
 
       // Build email batch
@@ -349,11 +349,8 @@ Deno.serve(async (req) => {
           } catch (e) { console.error('Activity creation failed:', e) }
 
           // Update daily send count
-          if (!campaign.send_spacing) {
-            // Only increment here if not spacing (spacing claims budget upfront)
-            todaySent += chunk.length
-            remainingBudget -= chunk.length
-          }
+          todaySent += chunk.length
+          remainingBudget -= chunk.length
           await supabaseAdmin.from('email_send_log').upsert({
             send_date: today,
             emails_sent: todaySent,
