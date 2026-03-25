@@ -17,7 +17,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ArrowLeft, Copy, PauseCircle, PlayCircle, FlaskConical } from 'lucide-react';
+import { ArrowLeft, Copy, PauseCircle, PlayCircle, FlaskConical, Pencil, Save, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import CampaignAnalytics from '@/components/campaigns/CampaignAnalytics';
 
@@ -53,6 +55,12 @@ export default function CampaignDetailPage() {
   }, [id]);
 
   const [abStats, setAbStats] = useState<{ a: { sent: number; opened: number; clicked: number; bounced: number }; b: { sent: number; opened: number; clicked: number; bounced: number } } | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editSubject, setEditSubject] = useState('');
+  const [editBody, setEditBody] = useState('');
+  const [editVariantBSubject, setEditVariantBSubject] = useState('');
+  const [editVariantBBody, setEditVariantBBody] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (campaign?.abTestEnabled && id) {
@@ -74,6 +82,8 @@ export default function CampaignDetailPage() {
       </div>
     );
   }
+
+  const isEditable = ['active', 'paused', 'scheduled'].includes(campaign.status);
 
   const stats = {
     sent: campaignEmails.length,
@@ -110,6 +120,42 @@ export default function CampaignDetailPage() {
       toast.success('Campaign resumed');
     } catch {
       toast.error('Failed to resume');
+    }
+  };
+
+  const handleStartEdit = () => {
+    setEditSubject(campaign.subject);
+    setEditBody(campaign.body);
+    setEditVariantBSubject(campaign.variantBSubject || '');
+    setEditVariantBBody(campaign.variantBBody || '');
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editSubject.trim() || !editBody.trim()) {
+      toast.error('Subject and body are required');
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateCampaign(campaign.id, {
+        subject: editSubject,
+        body: editBody,
+        ...(campaign.abTestEnabled && {
+          variantBSubject: editVariantBSubject,
+          variantBBody: editVariantBBody,
+        }),
+      });
+      setIsEditing(false);
+      toast.success('Campaign content updated');
+    } catch {
+      toast.error('Failed to update');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -216,18 +262,72 @@ export default function CampaignDetailPage() {
       )}
 
       <Card className="border">
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-2 flex flex-row items-center justify-between">
           <CardTitle className="text-sm">Email Content</CardTitle>
+          {isEditable && !isEditing && (
+            <Button variant="ghost" size="sm" className="gap-1.5 h-7" onClick={handleStartEdit}>
+              <Pencil className="h-3.5 w-3.5" /> Edit
+            </Button>
+          )}
+          {isEditing && (
+            <div className="flex items-center gap-1.5">
+              <Button variant="ghost" size="sm" className="gap-1 h-7" onClick={handleCancelEdit}>
+                <X className="h-3.5 w-3.5" /> Cancel
+              </Button>
+              <Button size="sm" className="gap-1 h-7" onClick={handleSaveEdit} disabled={saving}>
+                <Save className="h-3.5 w-3.5" /> {saving ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+          )}
         </CardHeader>
-        <CardContent className="space-y-2">
-          <div>
-            <p className="text-xs text-muted-foreground">Subject</p>
-            <p className="text-sm font-medium">{campaign.subject}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Body</p>
-            <p className="text-sm whitespace-pre-line text-foreground">{campaign.body}</p>
-          </div>
+        <CardContent className="space-y-3">
+          {isEditing ? (
+            <>
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted-foreground">Subject</p>
+                <Input value={editSubject} onChange={e => setEditSubject(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted-foreground">Body</p>
+                <Textarea value={editBody} onChange={e => setEditBody(e.target.value)} rows={6} />
+              </div>
+              {campaign.abTestEnabled && (
+                <>
+                  <div className="space-y-1.5 pt-2 border-t">
+                    <p className="text-xs text-muted-foreground">Variant B Subject</p>
+                    <Input value={editVariantBSubject} onChange={e => setEditVariantBSubject(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-muted-foreground">Variant B Body</p>
+                    <Textarea value={editVariantBBody} onChange={e => setEditVariantBBody(e.target.value)} rows={6} />
+                  </div>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <div>
+                <p className="text-xs text-muted-foreground">Subject</p>
+                <p className="text-sm font-medium">{campaign.subject}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Body</p>
+                <p className="text-sm whitespace-pre-line text-foreground">{campaign.body}</p>
+              </div>
+              {campaign.abTestEnabled && (
+                <>
+                  <div className="pt-2 border-t">
+                    <p className="text-xs text-muted-foreground">Variant B Subject</p>
+                    <p className="text-sm font-medium">{campaign.variantBSubject}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Variant B Body</p>
+                    <p className="text-sm whitespace-pre-line text-foreground">{campaign.variantBBody}</p>
+                  </div>
+                </>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
 
