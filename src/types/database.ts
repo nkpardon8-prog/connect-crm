@@ -537,6 +537,7 @@ export type Database = {
           opened_at: string | null
           clicked_at: string | null
           bounced_at: string | null
+          user_id: string | null
         }
         Insert: {
           body?: string
@@ -558,6 +559,7 @@ export type Database = {
           opened_at?: string | null
           clicked_at?: string | null
           bounced_at?: string | null
+          user_id?: string | null
         }
         Update: {
           body?: string
@@ -579,6 +581,7 @@ export type Database = {
           opened_at?: string | null
           clicked_at?: string | null
           bounced_at?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {

@@ -145,6 +145,7 @@ Deno.serve(async (req) => {
         thread_id: threadId,
         reply_to_id: email.replyToId || null,
         provider_message_id: providerMessageId,
+        user_id: authUser.id,
       }).select().single()
 
       if (dbErr) console.error('DB insert failed after send:', dbErr)
@@ -208,6 +209,7 @@ Deno.serve(async (req) => {
           thread_id: email.threadId || crypto.randomUUID(),
           reply_to_id: null,
           provider_message_id: resendResults?.[idx]?.id || null,
+          user_id: authUser.id,
         }))
 
         const { data: inserted, error: dbErr } = await supabaseAdmin

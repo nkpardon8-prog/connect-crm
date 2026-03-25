@@ -2,13 +2,18 @@ import { supabase } from '@/lib/supabase';
 import { transformRows, toCamelCase, toSnakeCase } from '@/lib/transforms';
 import type { EmailMessage } from '@/types/crm';
 
-export async function getEmails(): Promise<EmailMessage[]> {
-  const { data, error } = await supabase
+export async function getEmails(userId?: string): Promise<EmailMessage[]> {
+  let query = supabase
     .from('emails')
     .select('*')
     .is('deleted_at', null)
     .order('sent_at', { ascending: false });
 
+  if (userId) {
+    query = query.eq('user_id', userId);
+  }
+
+  const { data, error } = await query;
   if (error) throw error;
   return transformRows<EmailMessage>(data || []);
 }

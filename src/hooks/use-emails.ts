@@ -4,12 +4,12 @@ import * as api from '@/lib/api/emails';
 import { supabase } from '@/lib/supabase';
 import type { EmailMessage } from '@/types/crm';
 
-export function useEmails() {
+export function useEmails(userId?: string) {
   const queryClient = useQueryClient();
 
   const { data: emails = [], isLoading, error, isFetching } = useQuery({
-    queryKey: ['emails'],
-    queryFn: api.getEmails,
+    queryKey: ['emails', userId],
+    queryFn: () => api.getEmails(userId),
   });
 
   useEffect(() => {

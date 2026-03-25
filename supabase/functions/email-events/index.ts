@@ -241,6 +241,16 @@ Deno.serve(async (req) => {
           .is('deleted_at', null)
           .maybeSingle()
 
+        // Find email owner by matching to-address prefix
+        const toPrefix = toEmail.split('@')[0]
+        const { data: toProfile } = await supabaseAdmin
+          .from('profiles')
+          .select('id')
+          .eq('email_prefix', toPrefix)
+          .maybeSingle()
+        const emailUserId = toProfile?.id || null
+        if (!emailUserId) console.warn(`No profile found for email prefix: ${toPrefix}`)
+
         // Step 5: Insert inbound email
         const { error: insertErr } = await supabaseAdmin.from('emails').insert({
           lead_id: matchedLead?.id || null,
@@ -254,6 +264,7 @@ Deno.serve(async (req) => {
           thread_id: threadId,
           reply_to_id: replyToId,
           provider_message_id: inboundEmailId,
+          user_id: emailUserId,
         })
 
         if (insertErr) {

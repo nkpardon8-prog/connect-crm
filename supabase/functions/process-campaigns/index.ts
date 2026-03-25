@@ -313,6 +313,7 @@ Deno.serve(async (req) => {
             thread_id: `t-camp-${campaign.id}-${e.lead_id || e.id}`,
             campaign_id: campaign.id,
             provider_message_id: resendResults?.[j]?.id || null,
+            user_id: campaign.sent_by,
           }})
 
           await supabaseAdmin.from('emails').insert(emailRows)
@@ -502,6 +503,7 @@ Deno.serve(async (req) => {
           thread_id: `t-camp-${campaign.id}-${enrollment.lead_id || enrollment.id}`,
           campaign_id: campaign.id,
           provider_message_id: providerMessageId,
+          user_id: campaign.sent_by,
         })
 
         // Create activity record for drip email
