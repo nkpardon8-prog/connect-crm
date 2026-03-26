@@ -149,6 +149,9 @@ Deno.serve(async (req) => {
       }).select().single()
 
       if (dbErr) console.error('DB insert failed after send:', dbErr)
+      if (email.leadId) {
+        await supabaseAdmin.from('leads').update({ last_contacted_at: new Date().toISOString() }).eq('id', email.leadId)
+      }
       results.push(row)
 
     } else {

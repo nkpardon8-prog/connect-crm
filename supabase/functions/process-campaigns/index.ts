@@ -318,6 +318,14 @@ Deno.serve(async (req) => {
 
           await supabaseAdmin.from('emails').insert(emailRows)
 
+          // Update last_contacted_at on leads
+          const contactedLeadIds = batchEnrollments.map(e => e.lead_id).filter(Boolean)
+          if (contactedLeadIds.length) {
+            await supabaseAdmin.from('leads')
+              .update({ last_contacted_at: new Date().toISOString() })
+              .in('id', contactedLeadIds)
+          }
+
           // Update enrollments to 'sent', grouped by A/B variant
           const variantAIds = batchEnrollments.filter((e: Record<string, unknown>) => e._variant === 'A').map(e => e.id)
           const variantBIds = batchEnrollments.filter((e: Record<string, unknown>) => e._variant === 'B').map(e => e.id)
@@ -505,6 +513,13 @@ Deno.serve(async (req) => {
           provider_message_id: providerMessageId,
           user_id: campaign.sent_by,
         })
+
+        // Update last_contacted_at on lead
+        if (enrollment.lead_id) {
+          await supabaseAdmin.from('leads')
+            .update({ last_contacted_at: new Date().toISOString() })
+            .eq('id', enrollment.lead_id)
+        }
 
         // Create activity record for drip email
         try {
