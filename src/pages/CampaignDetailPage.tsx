@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import CampaignAnalytics from '@/components/campaigns/CampaignAnalytics';
+import type { CampaignEnrollment } from '@/types/crm';
 
 const statusColors: Record<string, string> = {
   draft: 'bg-slate-100 text-slate-700',
@@ -30,6 +31,22 @@ const statusColors: Record<string, string> = {
   completed: 'bg-emerald-100 text-emerald-700',
   scheduled: 'bg-violet-100 text-violet-700',
 };
+
+// Formats an ISO timestamp as "Thu Mar 27 at 9:00 AM" in the user's local timezone
+function formatSendTime(isoString: string): string {
+  const date = new Date(isoString);
+  const datePart = date.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+  const timePart = date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+  return `${datePart} at ${timePart}`;
+}
 
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -43,16 +60,50 @@ export default function CampaignDetailPage() {
   const campaignEmails = emails.filter(e => e.campaignId === id && e.direction === 'outbound');
 
   // Get enrollments for this campaign
-  const [enrollments, setEnrollments] = useState<Array<{ leadId: string | null; status: string; currentStep: number }>>([]);
+  const [enrollments, setEnrollments] = useState<
+    Pick<CampaignEnrollment, 'id' | 'leadId' | 'email' | 'status' | 'currentStep' | 'nextSendAt' | 'sentAt'>[]
+  >([]);
   useEffect(() => {
     if (!id) return;
     supabase.from('campaign_enrollments')
-      .select('lead_id, status, current_step')
+      .select('id, lead_id, email, status, current_step, next_send_at, sent_at')
       .eq('campaign_id', id)
-      .then(({ data }) => {
-        if (data) setEnrollments(data.map(e => ({ leadId: e.lead_id, status: e.status, currentStep: e.current_step })));
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('Failed to load enrollments:', error);
+          return;
+        }
+        if (data) setEnrollments(data.map(e => ({
+          id: e.id,
+          leadId: e.lead_id,
+          email: e.email,
+          status: e.status,
+          currentStep: e.current_step,
+          nextSendAt: e.next_send_at,
+          sentAt: e.sent_at,
+        })));
       });
   }, [id]);
+
+  const sortedEnrollments = [...enrollments].sort((a, b) => {
+    const aIsPending = a.status === 'pending';
+    const bIsPending = b.status === 'pending';
+
+    if (aIsPending && !bIsPending) return -1;
+    if (!aIsPending && bIsPending) return 1;
+
+    if (aIsPending && bIsPending) {
+      if (!a.nextSendAt && !b.nextSendAt) return 0;
+      if (!a.nextSendAt) return 1;
+      if (!b.nextSendAt) return -1;
+      return new Date(a.nextSendAt).getTime() - new Date(b.nextSendAt).getTime();
+    }
+
+    if (!a.sentAt && !b.sentAt) return 0;
+    if (!a.sentAt) return 1;
+    if (!b.sentAt) return -1;
+    return new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime();
+  });
 
   const [abStats, setAbStats] = useState<{ a: { sent: number; opened: number; clicked: number; bounced: number }; b: { sent: number; opened: number; clicked: number; bounced: number } } | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -333,7 +384,7 @@ export default function CampaignDetailPage() {
 
       <Card className="border">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Recipients ({campaignEmails.length})</CardTitle>
+          <CardTitle className="text-sm">Recipients ({enrollments.length})</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -343,48 +394,78 @@ export default function CampaignDetailPage() {
                 <TableHead className="text-xs">Email</TableHead>
                 <TableHead className="text-xs">Status</TableHead>
                 <TableHead className="text-xs">Step</TableHead>
+                <TableHead className="text-xs">Scheduled / Sent</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {campaignEmails.map(email => {
-                const lead = leads.find(l => l.id === email.leadId);
-                const enrollment = enrollments.find(e => e.leadId === email.leadId);
-                const emailStatus = email.bouncedAt
-                  ? 'Bounced'
-                  : email.clickedAt
-                    ? 'Clicked'
-                    : email.openedAt
-                      ? 'Opened'
-                      : 'Delivered';
-                const statusColor = email.bouncedAt
-                  ? 'text-red-500'
-                  : email.clickedAt
-                    ? 'text-blue-600'
-                    : email.openedAt
-                      ? 'text-emerald-600'
-                      : 'text-muted-foreground';
+              {sortedEnrollments.map(enrollment => {
+                const lead = leads.find(l => l.id === enrollment.leadId);
+                const matchedEmail = campaignEmails.find(
+                  e => (enrollment.leadId && e.leadId === enrollment.leadId) || e.to === enrollment.email
+                );
+
+                const isPending = enrollment.status === 'pending';
+                const displayStatus = isPending
+                  ? 'Pending'
+                  : matchedEmail?.bouncedAt
+                    ? 'Bounced'
+                    : matchedEmail?.clickedAt
+                      ? 'Clicked'
+                      : matchedEmail?.openedAt
+                        ? 'Opened'
+                        : enrollment.status === 'replied'
+                          ? 'Replied'
+                          : enrollment.status === 'bounced'
+                            ? 'Bounced'
+                            : enrollment.status === 'failed'
+                              ? 'Failed'
+                              : enrollment.status === 'unsubscribed'
+                                ? 'Unsubscribed'
+                                : 'Delivered';
+
+                const statusColor = displayStatus === 'Pending'
+                  ? 'text-muted-foreground'
+                  : displayStatus === 'Bounced' || displayStatus === 'Failed'
+                    ? 'text-red-500'
+                    : displayStatus === 'Clicked'
+                      ? 'text-blue-600'
+                      : displayStatus === 'Opened'
+                        ? 'text-emerald-600'
+                        : displayStatus === 'Replied'
+                          ? 'text-violet-600'
+                          : displayStatus === 'Unsubscribed'
+                            ? 'text-amber-600'
+                            : 'text-muted-foreground';
+
+                const scheduleDisplay = isPending
+                  ? (enrollment.nextSendAt ? formatSendTime(enrollment.nextSendAt) : 'Pending')
+                  : (enrollment.sentAt ? formatSendTime(enrollment.sentAt) : '—');
+
                 return (
-                  <TableRow key={email.id}>
+                  <TableRow key={enrollment.id}>
                     <TableCell className="text-xs">
-                      {lead ? `${lead.firstName} ${lead.lastName}` : 'Unknown'}
+                      {lead ? `${lead.firstName} ${lead.lastName}` : enrollment.email.split('@')[0]}
                     </TableCell>
-                    <TableCell className="text-xs">{email.to}</TableCell>
+                    <TableCell className="text-xs">{enrollment.email}</TableCell>
                     <TableCell className={`text-xs font-medium ${statusColor}`}>
-                      {emailStatus}
+                      {displayStatus}
                     </TableCell>
                     <TableCell className="text-xs">
-                      {enrollment ? `Step ${enrollment.currentStep + 1}` : '—'}
+                      Step {enrollment.currentStep + 1}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {scheduleDisplay}
                     </TableCell>
                   </TableRow>
                 );
               })}
-              {campaignEmails.length === 0 && (
+              {enrollments.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={4}
+                    colSpan={5}
                     className="text-center text-xs text-muted-foreground py-4"
                   >
-                    No emails sent yet
+                    No recipients enrolled yet
                   </TableCell>
                 </TableRow>
               )}
