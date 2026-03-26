@@ -16,6 +16,22 @@ The MCP server runs locally on your machine and exposes 38 CRM tools to any Clau
 
 All operations are **per-user scoped** — each user only accesses their own data, same as the CRM UI.
 
+## How It Connects to the Live CRM
+
+The MCP server connects directly to the **same Supabase database** as the hosted CRM web app. There is no sync layer — both read and write to the same source of truth.
+
+```
+Hosted CRM (Netlify)  ──→  Supabase DB  ←──  MCP Server (your machine)
+     (browser)              (single              (Claude Code)
+                             database)
+```
+
+- **Create a lead via MCP** → it appears instantly in the web app
+- **Send an email from the web app** → `list-emails` in the MCP returns it
+- **Campaign enrollments created via MCP** → the campaign scheduler (pg_cron) picks them up and sends automatically
+
+No additional hosting or infrastructure is needed. The MCP server runs locally as a Node.js process that starts when Claude Code launches and stops when it exits.
+
 ## Requirements
 
 - Node.js 18+
