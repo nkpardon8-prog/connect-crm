@@ -141,11 +141,18 @@ Deno.serve(async (req) => {
       let enrollments = enrollmentsData
 
       if (!enrollments?.length) {
-        // No pending enrollments — mark completed
-        await supabaseAdmin.from('campaigns')
-          .update({ status: 'completed' })
-          .eq('id', campaign.id)
-          .eq('status', 'active')
+        // None due right now — check if any are still pending (e.g. future next_send_at from send_spacing)
+        const { count: totalPending } = await supabaseAdmin.from('campaign_enrollments')
+          .select('*', { count: 'exact', head: true })
+          .eq('campaign_id', campaign.id)
+          .eq('status', 'pending')
+        if (!totalPending) {
+          // Truly nothing left — mark completed
+          await supabaseAdmin.from('campaigns')
+            .update({ status: 'completed' })
+            .eq('id', campaign.id)
+            .eq('status', 'active')
+        }
         continue
       }
 
