@@ -1,6 +1,7 @@
 import { corsHeaders } from '../_shared/cors.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { writeAlert } from '../_shared/alerts.ts'
+import { plainTextToHtml } from '../_shared/html.ts'
 
 const EMAIL_DOMAIN = 'integrateapi.ai'
 
@@ -112,6 +113,7 @@ Deno.serve(async (req) => {
           to: [email.to],
           subject: email.subject,
           text: email.body,
+          ...(campaignId ? { html: plainTextToHtml(email.body) } : {}),
           headers: Object.keys(threadingHeaders).length > 0 ? threadingHeaders : undefined,
         }),
       })
@@ -174,6 +176,7 @@ Deno.serve(async (req) => {
           to: [email.to],
           subject: email.subject,
           text: resolvedBodies[idx],
+          html: plainTextToHtml(resolvedBodies[idx]),
         }))
 
         const resendRes = await fetch('https://api.resend.com/emails/batch', {

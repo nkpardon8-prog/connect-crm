@@ -1,6 +1,7 @@
 import { corsHeaders } from '../_shared/cors.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { writeAlert } from '../_shared/alerts.ts'
+import { plainTextToHtml } from '../_shared/html.ts'
 
 const EMAIL_DOMAIN = 'integrateapi.ai'
 const CAMPAIGN_DOMAIN = 'mail.integrateapi.ai'
@@ -285,6 +286,7 @@ Deno.serve(async (req) => {
           to: [e.email],
           subject: emailSubject,
           text: emailBody,
+          html: plainTextToHtml(emailBody),
         }
       })
 
@@ -499,6 +501,7 @@ Deno.serve(async (req) => {
           to: [enrollment.email],
           subject: emailSubject,
           text: emailBody,
+          html: plainTextToHtml(emailBody),
         }),
       })
 
