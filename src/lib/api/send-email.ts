@@ -18,8 +18,12 @@ interface SendEmailResponse {
 }
 
 export async function sendEmail(email: SendEmailRequest): Promise<SendEmailResponse> {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !sessionData.session) throw new Error('Not authenticated');
+
   const { data, error } = await supabase.functions.invoke('send-email', {
     body: { emails: [email] },
+    headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
   });
 
   if (error) throw error;
@@ -28,8 +32,12 @@ export async function sendEmail(email: SendEmailRequest): Promise<SendEmailRespo
 }
 
 export async function sendBulkEmails(emails: SendEmailRequest[], campaignId?: string): Promise<SendEmailResponse> {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !sessionData.session) throw new Error('Not authenticated');
+
   const { data, error } = await supabase.functions.invoke('send-email', {
     body: { emails, campaignId: campaignId ?? null },
+    headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
   });
 
   if (error) throw error;
