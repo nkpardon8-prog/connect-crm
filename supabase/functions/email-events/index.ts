@@ -121,17 +121,6 @@ Deno.serve(async (req) => {
         const toRaw = event.data.to as string[]
         const inboundSubject = event.data.subject || '(no subject)'
 
-        // Idempotency: skip if already processed
-        const { data: existing } = await supabaseAdmin.from('emails')
-          .select('id')
-          .eq('provider_message_id', inboundEmailId)
-          .maybeSingle()
-
-        if (existing) {
-          console.log(`Duplicate webhook for email ${inboundEmailId}, skipping`)
-          break
-        }
-
         // Step 1: Fetch full email body + headers from Resend API
         const emailRes = await fetch(
           `https://api.resend.com/emails/receiving/${inboundEmailId}`,
@@ -146,6 +135,25 @@ Deno.serve(async (req) => {
         const emailData = await emailRes.json()
         const inboundBody = emailData.text || emailData.html || ''
         const emailHeaders = emailData.headers || {}
+
+        // Extract actual Message-ID header for correct email threading.
+        // Resend's internal email_id is NOT the RFC 5322 Message-ID that
+        // recipients' mail clients use for threading. We store the real one
+        // so that getThreadingHeaders in send-email produces correct In-Reply-To.
+        const rawMessageId = emailHeaders['message-id'] || emailHeaders['Message-Id'] || emailHeaders['Message-ID'] || ''
+        const actualMessageId = rawMessageId.replace(/^<|>$/g, '').trim()
+        const storedProviderId = actualMessageId || inboundEmailId
+
+        // Idempotency: skip if already processed
+        const { data: existing } = await supabaseAdmin.from('emails')
+          .select('id')
+          .eq('provider_message_id', storedProviderId)
+          .maybeSingle()
+
+        if (existing) {
+          console.log(`Duplicate webhook for email ${inboundEmailId} (Message-ID: ${storedProviderId}), skipping`)
+          break
+        }
 
         // Step 2: Parse email addresses
         const fromMatch = fromRaw.match(/<(.+?)>/)
@@ -252,7 +260,7 @@ Deno.serve(async (req) => {
         if (!emailUserId) console.warn(`No profile found for email prefix: ${toPrefix}`)
 
         // Step 5: Insert inbound email
-        const { error: insertErr } = await supabaseAdmin.from('emails').insert({
+        const { data: insertedRow, error: insertErr } = await supabaseAdmin.from('emails').insert({
           lead_id: matchedLead?.id || null,
           from: fromEmail,
           to: toEmail,
@@ -263,9 +271,9 @@ Deno.serve(async (req) => {
           direction: 'inbound',
           thread_id: threadId,
           reply_to_id: replyToId,
-          provider_message_id: inboundEmailId,
+          provider_message_id: storedProviderId,
           user_id: emailUserId,
-        })
+        }).select('id').single()
 
         if (insertErr) {
           console.error('Failed to insert inbound email:', insertErr)
@@ -285,7 +293,7 @@ Deno.serve(async (req) => {
 
         // Reply detection: if this inbound email is a reply to a campaign email,
         // set campaign_id on the inbound row, update enrollment to 'replied', and flag lead as 'warm'
-        if (replyToId) {
+        if (replyToId && insertedRow) {
           // Look up the parent outbound email's campaign_id
           const { data: parentEmail } = await supabaseAdmin.from('emails')
             .select('campaign_id')
@@ -296,7 +304,7 @@ Deno.serve(async (req) => {
             // Set campaign_id on the inbound email
             await supabaseAdmin.from('emails')
               .update({ campaign_id: parentEmail.campaign_id })
-              .eq('provider_message_id', inboundEmailId)
+              .eq('id', insertedRow.id)
 
             // Update enrollment to 'replied'
             if (matchedLead?.id) {
