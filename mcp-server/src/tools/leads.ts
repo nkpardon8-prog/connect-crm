@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { CRMContext } from '../client.js'
+import type { CRMClient } from '../client.js'
 
-export function registerLeadTools(server: McpServer, ctx: CRMContext): void {
+export function registerLeadTools(server: McpServer, crm: CRMClient): void {
   // 1. list-leads
   server.tool(
     'list-leads',
@@ -16,35 +16,17 @@ export function registerLeadTools(server: McpServer, ctx: CRMContext): void {
       limit: z.number().int().positive().default(50).describe('Max results to return'),
     },
     async ({ status, search, limit }) => {
-      let query = ctx.supabase
-        .from('leads')
-        .select('*')
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-        .limit(limit)
-
-      if (ctx.userRole !== 'admin') {
-        query = query.eq('assigned_to', ctx.userId)
-      }
-
-      if (status) {
-        query = query.eq('status', status)
-      }
-
-      if (search) {
-        query = query.or(
-          `first_name.ilike.%${search}%,last_name.ilike.%${search}%,company.ilike.%${search}%,email.ilike.%${search}%`
-        )
-      }
-
-      const { data, error } = await query
-
-      if (error) {
-        return { content: [{ type: 'text' as const, text: `Error: ${error.message}` }] }
-      }
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(data ?? [], null, 2) }],
+      try {
+        const params: Record<string, string> = {}
+        if (status) params.status = status
+        if (search) params.q = search
+        params.limit = String(limit ?? 50)
+        const data = await crm.get('api-leads', params)
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data ?? [], null, 2) }],
+        }
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }] }
       }
     }
   )
@@ -57,28 +39,16 @@ export function registerLeadTools(server: McpServer, ctx: CRMContext): void {
       id: z.string().describe('Lead ID'),
     },
     async ({ id }) => {
-      let query = ctx.supabase
-        .from('leads')
-        .select('*')
-        .eq('id', id)
-        .is('deleted_at', null)
-
-      if (ctx.userRole !== 'admin') {
-        query = query.eq('assigned_to', ctx.userId)
-      }
-
-      const { data, error } = await query.maybeSingle()
-
-      if (error) {
-        return { content: [{ type: 'text' as const, text: `Error: ${error.message}` }] }
-      }
-
-      if (!data) {
-        return { content: [{ type: 'text' as const, text: 'Lead not found' }] }
-      }
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+      try {
+        const data = await crm.get('api-leads', { id })
+        if (!data) {
+          return { content: [{ type: 'text' as const, text: 'Lead not found' }] }
+        }
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        }
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }] }
       }
     }
   )
@@ -100,33 +70,26 @@ export function registerLeadTools(server: McpServer, ctx: CRMContext): void {
       tags: z.array(z.string()).optional().describe('Tags'),
     },
     async ({ firstName, lastName, email, company, phone, jobTitle, industry, location, status, tags }) => {
-      const record: Record<string, unknown> = {
-        first_name: firstName,
-        last_name: lastName,
-        email,
-        company,
-        assigned_to: ctx.userId,
-      }
+      try {
+        const body: Record<string, unknown> = {
+          first_name: firstName,
+          last_name: lastName,
+          email,
+          company,
+        }
+        if (phone !== undefined) body.phone = phone
+        if (jobTitle !== undefined) body.job_title = jobTitle
+        if (industry !== undefined) body.industry = industry
+        if (location !== undefined) body.location = location
+        if (status !== undefined) body.status = status
+        if (tags !== undefined) body.tags = tags
 
-      if (phone !== undefined) record.phone = phone
-      if (jobTitle !== undefined) record.job_title = jobTitle
-      if (industry !== undefined) record.industry = industry
-      if (location !== undefined) record.location = location
-      if (status !== undefined) record.status = status
-      if (tags !== undefined) record.tags = tags
-
-      const { data, error } = await ctx.supabase
-        .from('leads')
-        .insert(record)
-        .select()
-        .single()
-
-      if (error) {
-        return { content: [{ type: 'text' as const, text: `Error: ${error.message}` }] }
-      }
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        const data = await crm.post('api-leads', body)
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        }
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }] }
       }
     }
   )
@@ -150,38 +113,31 @@ export function registerLeadTools(server: McpServer, ctx: CRMContext): void {
       notes: z.string().optional(),
     },
     async ({ id, firstName, lastName, email, phone, company, jobTitle, industry, location, status, tags, notes }) => {
-      const updates: Record<string, unknown> = {}
+      try {
+        const updates: Record<string, unknown> = {}
 
-      if (firstName !== undefined) updates.first_name = firstName
-      if (lastName !== undefined) updates.last_name = lastName
-      if (email !== undefined) updates.email = email
-      if (phone !== undefined) updates.phone = phone
-      if (company !== undefined) updates.company = company
-      if (jobTitle !== undefined) updates.job_title = jobTitle
-      if (industry !== undefined) updates.industry = industry
-      if (location !== undefined) updates.location = location
-      if (status !== undefined) updates.status = status
-      if (tags !== undefined) updates.tags = tags
-      if (notes !== undefined) updates.notes = notes
+        if (firstName !== undefined) updates.first_name = firstName
+        if (lastName !== undefined) updates.last_name = lastName
+        if (email !== undefined) updates.email = email
+        if (phone !== undefined) updates.phone = phone
+        if (company !== undefined) updates.company = company
+        if (jobTitle !== undefined) updates.job_title = jobTitle
+        if (industry !== undefined) updates.industry = industry
+        if (location !== undefined) updates.location = location
+        if (status !== undefined) updates.status = status
+        if (tags !== undefined) updates.tags = tags
+        if (notes !== undefined) updates.notes = notes
 
-      if (Object.keys(updates).length === 0) {
-        return { content: [{ type: 'text' as const, text: 'No fields to update' }] }
-      }
+        if (Object.keys(updates).length === 0) {
+          return { content: [{ type: 'text' as const, text: 'No fields to update' }] }
+        }
 
-      let query = ctx.supabase.from('leads').update(updates).eq('id', id)
-
-      if (ctx.userRole !== 'admin') {
-        query = query.eq('assigned_to', ctx.userId)
-      }
-
-      const { data, error } = await query.select().single()
-
-      if (error) {
-        return { content: [{ type: 'text' as const, text: `Error: ${error.message}` }] }
-      }
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        const data = await crm.patch('api-leads', { id }, updates)
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        }
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }] }
       }
     }
   )
@@ -194,23 +150,13 @@ export function registerLeadTools(server: McpServer, ctx: CRMContext): void {
       id: z.string().describe('Lead ID'),
     },
     async ({ id }) => {
-      let query = ctx.supabase
-        .from('leads')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id)
-
-      if (ctx.userRole !== 'admin') {
-        query = query.eq('assigned_to', ctx.userId)
-      }
-
-      const { error } = await query
-
-      if (error) {
-        return { content: [{ type: 'text' as const, text: `Error: ${error.message}` }] }
-      }
-
-      return {
-        content: [{ type: 'text' as const, text: `Lead ${id} deleted` }],
+      try {
+        await crm.del('api-leads', { id })
+        return {
+          content: [{ type: 'text' as const, text: `Lead ${id} deleted` }],
+        }
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }] }
       }
     }
   )
@@ -224,28 +170,13 @@ export function registerLeadTools(server: McpServer, ctx: CRMContext): void {
       limit: z.number().int().positive().default(50).describe('Max results'),
     },
     async ({ query, limit }) => {
-      let dbQuery = ctx.supabase
-        .from('leads')
-        .select('*')
-        .is('deleted_at', null)
-        .or(
-          `first_name.ilike.%${query}%,last_name.ilike.%${query}%,company.ilike.%${query}%,email.ilike.%${query}%`
-        )
-        .order('created_at', { ascending: false })
-        .limit(limit)
-
-      if (ctx.userRole !== 'admin') {
-        dbQuery = dbQuery.eq('assigned_to', ctx.userId)
-      }
-
-      const { data, error } = await dbQuery
-
-      if (error) {
-        return { content: [{ type: 'text' as const, text: `Error: ${error.message}` }] }
-      }
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(data ?? [], null, 2) }],
+      try {
+        const data = await crm.get('api-leads', { q: query, limit: String(limit ?? 50) })
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data ?? [], null, 2) }],
+        }
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }] }
       }
     }
   )
@@ -271,39 +202,33 @@ export function registerLeadTools(server: McpServer, ctx: CRMContext): void {
         .describe('Array of leads to import'),
     },
     async ({ leads }) => {
-      const records = leads.map((l) => {
-        const record: Record<string, unknown> = {
-          first_name: l.firstName,
-          last_name: l.lastName,
-          email: l.email,
-          company: l.company,
-          assigned_to: ctx.userId,
+      try {
+        const rows = leads.map((l) => {
+          const record: Record<string, unknown> = {
+            first_name: l.firstName,
+            last_name: l.lastName,
+            email: l.email,
+            company: l.company,
+          }
+          if (l.phone !== undefined) record.phone = l.phone
+          if (l.jobTitle !== undefined) record.job_title = l.jobTitle
+          if (l.industry !== undefined) record.industry = l.industry
+          if (l.location !== undefined) record.location = l.location
+          return record
+        })
+
+        const data = await crm.post('api-leads', rows)
+        const imported = Array.isArray(data) ? data.length : 0
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Imported ${imported} leads.\n${JSON.stringify(data, null, 2)}`,
+            },
+          ],
         }
-
-        if (l.phone !== undefined) record.phone = l.phone
-        if (l.jobTitle !== undefined) record.job_title = l.jobTitle
-        if (l.industry !== undefined) record.industry = l.industry
-        if (l.location !== undefined) record.location = l.location
-
-        return record
-      })
-
-      const { data, error } = await ctx.supabase
-        .from('leads')
-        .insert(records)
-        .select()
-
-      if (error) {
-        return { content: [{ type: 'text' as const, text: `Error: ${error.message}` }] }
-      }
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: `Imported ${data?.length ?? 0} leads.\n${JSON.stringify(data, null, 2)}`,
-          },
-        ],
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }] }
       }
     }
   )
@@ -316,19 +241,13 @@ export function registerLeadTools(server: McpServer, ctx: CRMContext): void {
       leadId: z.string().describe('Lead ID'),
     },
     async ({ leadId }) => {
-      const { data, error } = await ctx.supabase
-        .from('emails')
-        .select('*')
-        .eq('lead_id', leadId)
-        .eq('user_id', ctx.userId)
-        .order('sent_at', { ascending: false })
-
-      if (error) {
-        return { content: [{ type: 'text' as const, text: `Error: ${error.message}` }] }
-      }
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(data ?? [], null, 2) }],
+      try {
+        const data = await crm.get('api-leads', { leadId })
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data ?? [], null, 2) }],
+        }
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }] }
       }
     }
   )

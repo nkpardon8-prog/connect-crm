@@ -2,8 +2,11 @@ import { corsHeaders } from '../_shared/cors.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { writeAlert } from '../_shared/alerts.ts'
 import { plainTextToHtml } from '../_shared/html.ts'
+import { resolveUser } from '../_shared/auth.ts'
 
 const EMAIL_DOMAIN = 'integrateapi.ai'
+
+const supabaseAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -21,7 +24,7 @@ Deno.serve(async (req) => {
 
     const SITE_URL = Deno.env.get('SITE_URL') || ''
 
-    const authHeader = req.headers.get('Authorization')!
+    const authHeader = req.headers.get('Authorization')
     const { emails, campaignId } = await req.json()
 
     if (!emails || !Array.isArray(emails) || emails.length === 0) {
@@ -31,36 +34,22 @@ Deno.serve(async (req) => {
       )
     }
 
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-    )
-
-    // Authenticate user and validate email_prefix
-    const jwt = authHeader.replace('Bearer ', '')
-    const { data: { user: authUser } } = await supabaseAdmin.auth.getUser(jwt)
-    if (!authUser) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
+    let user
+    try {
+      user = await resolveUser(authHeader, supabaseAdmin)
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('email_prefix, name')
-      .eq('id', authUser.id)
-      .single()
-
-    if (!profile?.email_prefix) {
+    if (!user.emailPrefix) {
       return new Response(
         JSON.stringify({ error: 'Sending email not configured. Set it in Settings.' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
 
-    const validFrom = `${profile.email_prefix}@${EMAIL_DOMAIN}`
-    const senderName = profile.name
+    const validFrom = `${user.emailPrefix}@${EMAIL_DOMAIN}`
+    const senderName = user.name
 
     // Helper: get threading headers for replies
     async function getThreadingHeaders(threadId?: string, replyToId?: string) {
@@ -147,7 +136,7 @@ Deno.serve(async (req) => {
         thread_id: threadId,
         reply_to_id: email.replyToId || null,
         provider_message_id: providerMessageId,
-        user_id: authUser.id,
+        user_id: user.id,
       }).select().single()
 
       if (dbErr) console.error('DB insert failed after send:', dbErr)
@@ -215,7 +204,7 @@ Deno.serve(async (req) => {
           thread_id: email.threadId || crypto.randomUUID(),
           reply_to_id: null,
           provider_message_id: resendResults?.[idx]?.id || null,
-          user_id: authUser.id,
+          user_id: user.id,
         }))
 
         const { data: inserted, error: dbErr } = await supabaseAdmin

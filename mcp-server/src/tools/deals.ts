@@ -1,33 +1,23 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import type { CRMContext } from '../client.js'
+import type { CRMClient } from '../client.js'
 
-export function registerDealTools(server: McpServer, ctx: CRMContext) {
+export function registerDealTools(server: McpServer, crm: CRMClient) {
   // 1. list-deals
   server.tool(
     'list-deals',
     'List all deals. Optionally filter by stage.',
     { stage: z.string().optional() },
     async ({ stage }) => {
-      let query = ctx.supabase
-        .from('deals')
-        .select('*')
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-
-      if (ctx.userRole !== 'admin') {
-        query = query.eq('assigned_to', ctx.userId)
-      }
-
-      if (stage) {
-        query = query.eq('stage', stage)
-      }
-
-      const { data, error } = await query
-      if (error) throw new Error(error.message)
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+      try {
+        const params: Record<string, string> = {}
+        if (stage) params.stage = stage
+        const data = await crm.get('api-deals', params)
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        }
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : String(err))
       }
     }
   )
@@ -38,21 +28,13 @@ export function registerDealTools(server: McpServer, ctx: CRMContext) {
     'Get a single deal by ID.',
     { id: z.string() },
     async ({ id }) => {
-      let query = ctx.supabase
-        .from('deals')
-        .select('*')
-        .eq('id', id)
-        .is('deleted_at', null)
-
-      if (ctx.userRole !== 'admin') {
-        query = query.eq('assigned_to', ctx.userId)
-      }
-
-      const { data, error } = await query.single()
-      if (error) throw new Error(error.message)
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+      try {
+        const data = await crm.get('api-deals', { id })
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        }
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : String(err))
       }
     }
   )
@@ -68,21 +50,18 @@ export function registerDealTools(server: McpServer, ctx: CRMContext) {
       stage: z.string().optional(),
     },
     async ({ leadId, title, value, stage }) => {
-      const { data, error } = await ctx.supabase
-        .from('deals')
-        .insert({
+      try {
+        const data = await crm.post('api-deals', {
           lead_id: leadId,
           title,
           value,
-          stage: stage ?? 'new',
-          assigned_to: ctx.userId,
+          stage: stage ?? 'prospecting',
         })
-        .select()
-        .single()
-
-      if (error) throw new Error(error.message)
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        }
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : String(err))
       }
     }
   )
@@ -90,7 +69,7 @@ export function registerDealTools(server: McpServer, ctx: CRMContext) {
   // 4. update-deal
   server.tool(
     'update-deal',
-    'Update a deal\'s stage, value, or title.',
+    "Update a deal's stage, value, or title.",
     {
       id: z.string(),
       stage: z.string().optional(),
@@ -98,7 +77,7 @@ export function registerDealTools(server: McpServer, ctx: CRMContext) {
       title: z.string().optional(),
     },
     async ({ id, stage, value, title }) => {
-      const updates: Record<string, string | number> = {}
+      const updates: Record<string, unknown> = {}
       if (stage !== undefined) updates.stage = stage
       if (value !== undefined) updates.value = value
       if (title !== undefined) updates.title = title
@@ -109,16 +88,13 @@ export function registerDealTools(server: McpServer, ctx: CRMContext) {
         }
       }
 
-      let query = ctx.supabase.from('deals').update(updates).eq('id', id)
-      if (ctx.userRole !== 'admin') {
-        query = query.eq('assigned_to', ctx.userId)
-      }
-
-      const { data, error } = await query.select().single()
-      if (error) throw new Error(error.message)
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+      try {
+        const data = await crm.patch('api-deals', { id }, updates)
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        }
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : String(err))
       }
     }
   )
@@ -126,19 +102,16 @@ export function registerDealTools(server: McpServer, ctx: CRMContext) {
   // 5. delete-deal
   server.tool(
     'delete-deal',
-    'Permanently delete a deal.',
+    'Soft-delete a deal (sets deleted_at, recoverable).',
     { id: z.string() },
     async ({ id }) => {
-      let query = ctx.supabase.from('deals').delete().eq('id', id)
-      if (ctx.userRole !== 'admin') {
-        query = query.eq('assigned_to', ctx.userId)
-      }
-
-      const { error } = await query
-      if (error) throw new Error(error.message)
-
-      return {
-        content: [{ type: 'text' as const, text: `Deal ${id} deleted.` }],
+      try {
+        await crm.del('api-deals', { id })
+        return {
+          content: [{ type: 'text' as const, text: `Deal ${id} deleted.` }],
+        }
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : String(err))
       }
     }
   )

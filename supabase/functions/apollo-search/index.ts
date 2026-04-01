@@ -1,6 +1,9 @@
 import { corsHeaders } from '../_shared/cors.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { writeAlert } from '../_shared/alerts.ts'
+import { resolveUser } from '../_shared/auth.ts'
+
+const supabaseAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
 // --- Types ---
 
@@ -206,7 +209,6 @@ Deno.serve(async (req) => {
       )
     }
 
-    const authHeader = req.headers.get('Authorization')!
     const { prompt, perPage = 25 } = await req.json()
 
     if (!prompt || typeof prompt !== 'string') {
@@ -216,7 +218,12 @@ Deno.serve(async (req) => {
       )
     }
 
-    const supabaseAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+    let user
+    try {
+      user = await resolveUser(req.headers.get('Authorization'), supabaseAdmin)
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
 
     // Step 1: LLM parsing — extract Apollo filters from natural language
     console.log('Step 1: Parsing prompt with LLM...')
@@ -407,20 +414,15 @@ Deno.serve(async (req) => {
 
     // Step 6: Log usage
     try {
-      const jwt = authHeader.replace('Bearer ', '')
-      const { data: { user } } = await supabaseAdmin.auth.getUser(jwt)
-
-      if (user) {
-        await supabaseAdmin.from('apollo_usage').insert({
-          user_id: user.id,
-          action: 'search_and_enrich',
-          credits_used: enriched.length, // credits = enriched count (1 per person), not leads returned
-          search_count: people.length,
-          enrichment_count: enriched.length,
-          results_returned: scoredLeads.length,
-          prompt,
-        })
-      }
+      await supabaseAdmin.from('apollo_usage').insert({
+        user_id: user.id,
+        action: 'search_and_enrich',
+        credits_used: enriched.length,
+        search_count: people.length,
+        enrichment_count: enriched.length,
+        results_returned: scoredLeads.length,
+        prompt,
+      })
     } catch (logErr) {
       console.error('Failed to log usage (non-fatal):', logErr)
     }

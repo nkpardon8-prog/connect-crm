@@ -1,8 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import type { CRMContext } from '../client.js'
+import type { CRMClient } from '../client.js'
 
-export function registerApolloTools(server: McpServer, ctx: CRMContext) {
+export function registerApolloTools(server: McpServer, crm: CRMClient) {
   // 1. search-apollo
   server.tool(
     'search-apollo',
@@ -12,23 +12,13 @@ export function registerApolloTools(server: McpServer, ctx: CRMContext) {
       perPage: z.number().default(10),
     },
     async ({ prompt, perPage }) => {
-      const { data: result, error } = await ctx.supabase.functions.invoke('apollo-search', {
-        body: { prompt, perPage },
-      })
-
-      if (error) throw new Error(error.message)
-
-      await ctx.supabase.from('apollo_usage').insert({
-        user_id: ctx.userId,
-        action: 'search_people',
-        credits_used: (result as { creditsUsed?: number }).creditsUsed ?? 0,
-        search_count: 1,
-        results_returned: (result as { leads?: unknown[] }).leads?.length ?? 0,
-        prompt,
-      })
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      try {
+        const result = await crm.post('apollo-search', { prompt, perPage: perPage ?? 10 })
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        }
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : String(err))
       }
     }
   )
@@ -42,28 +32,14 @@ export function registerApolloTools(server: McpServer, ctx: CRMContext) {
       perPage: z.number().default(10),
     },
     async ({ prompt, perPage }) => {
-      const companyPrompt = `companies: ${prompt}`
-
-      const { data: result, error } = await ctx.supabase.functions.invoke('apollo-search', {
-        body: { prompt: companyPrompt, perPage },
-      })
-
-      if (error) throw new Error(error.message)
-
-      await ctx.supabase.from('apollo_usage').insert({
-        user_id: ctx.userId,
-        action: 'search_companies',
-        credits_used: (result as { creditsUsed?: number }).creditsUsed ?? 0,
-        search_count: 1,
-        results_returned:
-          (result as { leads?: unknown[]; companies?: unknown[] }).companies?.length ??
-          (result as { leads?: unknown[] }).leads?.length ??
-          0,
-        prompt: companyPrompt,
-      })
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      try {
+        const companyPrompt = `companies: ${prompt}`
+        const result = await crm.post('apollo-search', { prompt: companyPrompt, perPage: perPage ?? 10 })
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        }
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : String(err))
       }
     }
   )

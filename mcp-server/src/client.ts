@@ -1,55 +1,40 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
-
-export interface CRMContext {
-  supabase: SupabaseClient
-  userId: string
-  userRole: 'admin' | 'employee'
-  emailPrefix: string
-  userName: string
-  resendApiKey: string
+export interface CRMClient {
+  get(path: string, params?: Record<string, string>): Promise<unknown>
+  post(path: string, body?: unknown): Promise<unknown>
+  patch(path: string, params?: Record<string, string>, body?: unknown): Promise<unknown>
+  del(path: string, params?: Record<string, string>): Promise<unknown>
 }
 
-export async function initContext(): Promise<CRMContext> {
-  const url = process.env.SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const email = process.env.CRM_USER_EMAIL
-  const resendApiKey = process.env.RESEND_API_KEY
+export function initClient(): CRMClient {
+  const baseUrl = process.env.CRM_API_URL?.replace(/\/$/, '')
+  const apiKey = process.env.CRM_API_KEY
 
-  if (!url || !key || !email || !resendApiKey) {
-    throw new Error(
-      'Missing required env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, CRM_USER_EMAIL, RESEND_API_KEY'
-    )
+  if (!baseUrl || !apiKey) {
+    throw new Error('Missing required env vars: CRM_API_URL, CRM_API_KEY')
   }
 
-  const supabase = createClient(url, key)
-
-  // Look up user by email prefix, fallback to auth email
-  const prefix = email.split('@')[0]
-  let { data: profile } = await supabase
-    .from('profiles')
-    .select('id, name, role, email_prefix')
-    .eq('email_prefix', prefix)
-    .maybeSingle()
-
-  if (!profile) {
-    const { data: fallback } = await supabase
-      .from('profiles')
-      .select('id, name, role, email_prefix')
-      .eq('email', email)
-      .maybeSingle()
-    profile = fallback
+  const headers = {
+    Authorization: `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
   }
 
-  if (!profile) {
-    throw new Error(`No profile found for email: ${email}`)
+  async function request(url: string, init: RequestInit): Promise<unknown> {
+    const res = await fetch(url, { ...init, headers })
+    const text = await res.text()
+    if (!res.ok) throw new Error(`CRM API error ${res.status}: ${text}`)
+    return text ? JSON.parse(text) : null
+  }
+
+  function buildUrl(path: string, params?: Record<string, string>): string {
+    const url = new URL(`${baseUrl}/${path}`)
+    if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
+    return url.toString()
   }
 
   return {
-    supabase,
-    userId: profile.id,
-    userRole: profile.role as 'admin' | 'employee',
-    emailPrefix: profile.email_prefix,
-    userName: profile.name,
-    resendApiKey,
+    get: (path, params) => request(buildUrl(path, params), { method: 'GET' }),
+    post: (path, body) => request(buildUrl(path), { method: 'POST', body: JSON.stringify(body ?? {}) }),
+    patch: (path, params, body) => request(buildUrl(path, params), { method: 'PATCH', body: JSON.stringify(body ?? {}) }),
+    del: (path, params) => request(buildUrl(path, params), { method: 'DELETE' }),
   }
 }

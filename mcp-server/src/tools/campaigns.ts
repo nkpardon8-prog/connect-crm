@@ -1,33 +1,23 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import type { CRMContext } from '../client.js'
+import type { CRMClient } from '../client.js'
 
-export function registerCampaignTools(server: McpServer, ctx: CRMContext) {
+export function registerCampaignTools(server: McpServer, crm: CRMClient) {
   // 1. list-campaigns
   server.tool(
     'list-campaigns',
     'List all campaigns. Optionally filter by status.',
     { status: z.string().optional() },
     async ({ status }) => {
-      let query = ctx.supabase
-        .from('campaigns')
-        .select('*')
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-
-      if (ctx.userRole !== 'admin') {
-        query = query.eq('sent_by', ctx.userId)
-      }
-
-      if (status) {
-        query = query.eq('status', status)
-      }
-
-      const { data, error } = await query
-      if (error) throw new Error(error.message)
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+      try {
+        const params: Record<string, string> = {}
+        if (status) params.status = status
+        const data = await crm.get('api-campaigns', params)
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        }
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : String(err))
       }
     }
   )
@@ -38,34 +28,13 @@ export function registerCampaignTools(server: McpServer, ctx: CRMContext) {
     'Get a single campaign by ID, including enrollment counts.',
     { id: z.string() },
     async ({ id }) => {
-      let campaignQuery = ctx.supabase
-        .from('campaigns')
-        .select('*')
-        .eq('id', id)
-        .is('deleted_at', null)
-
-      if (ctx.userRole !== 'admin') {
-        campaignQuery = campaignQuery.eq('sent_by', ctx.userId)
-      }
-
-      const { data: campaign, error: campaignError } = await campaignQuery.single()
-      if (campaignError) throw new Error(campaignError.message)
-
-      const { data: enrollments, error: enrollError } = await ctx.supabase
-        .from('campaign_enrollments')
-        .select('status')
-        .eq('campaign_id', id)
-
-      if (enrollError) throw new Error(enrollError.message)
-
-      const enrollmentCounts: Record<string, number> = {}
-      for (const e of enrollments ?? []) {
-        enrollmentCounts[e.status] = (enrollmentCounts[e.status] ?? 0) + 1
-      }
-
-      const result = { ...campaign, enrollmentCounts }
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      try {
+        const data = await crm.get('api-campaigns', { id })
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        }
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : String(err))
       }
     }
   )
@@ -84,26 +53,21 @@ export function registerCampaignTools(server: McpServer, ctx: CRMContext) {
       dailySendLimit: z.number().optional(),
     },
     async ({ name, subject, body, scheduledAt, smartSend, sendSpacing, dailySendLimit }) => {
-      const { data, error } = await ctx.supabase
-        .from('campaigns')
-        .insert({
+      try {
+        const data = await crm.post('api-campaigns', {
           name,
           subject,
           body,
-          sent_by: ctx.userId,
-          status: 'draft',
-          recipient_ids: [],
           scheduled_at: scheduledAt ?? null,
           smart_send: smartSend ?? false,
           send_spacing: sendSpacing ?? null,
           daily_send_limit: dailySendLimit ?? null,
         })
-        .select()
-        .single()
-
-      if (error) throw new Error(error.message)
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        }
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : String(err))
       }
     }
   )
@@ -114,23 +78,13 @@ export function registerCampaignTools(server: McpServer, ctx: CRMContext) {
     'Launch a campaign. Provide scheduledAt to schedule it, otherwise activates immediately.',
     { id: z.string(), scheduledAt: z.string().optional() },
     async ({ id, scheduledAt }) => {
-      const newStatus = scheduledAt ? 'scheduled' : 'active'
-      const now = new Date().toISOString()
-
-      const { data, error } = await ctx.supabase
-        .from('campaigns')
-        .update({
-          status: newStatus,
-          scheduled_at: scheduledAt ?? null,
-          sent_at: now,
-        })
-        .eq('id', id)
-        .select()
-        .single()
-
-      if (error) throw new Error(error.message)
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+      try {
+        const data = await crm.post(`api-campaigns?action=launch&id=${encodeURIComponent(id)}`, { scheduledAt })
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        }
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : String(err))
       }
     }
   )
@@ -141,16 +95,13 @@ export function registerCampaignTools(server: McpServer, ctx: CRMContext) {
     'Pause an active campaign.',
     { id: z.string() },
     async ({ id }) => {
-      const { data, error } = await ctx.supabase
-        .from('campaigns')
-        .update({ status: 'paused' })
-        .eq('id', id)
-        .select()
-        .single()
-
-      if (error) throw new Error(error.message)
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+      try {
+        const data = await crm.post(`api-campaigns?action=pause&id=${encodeURIComponent(id)}`, {})
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        }
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : String(err))
       }
     }
   )
@@ -161,16 +112,13 @@ export function registerCampaignTools(server: McpServer, ctx: CRMContext) {
     'Resume a paused campaign.',
     { id: z.string() },
     async ({ id }) => {
-      const { data, error } = await ctx.supabase
-        .from('campaigns')
-        .update({ status: 'active' })
-        .eq('id', id)
-        .select()
-        .single()
-
-      if (error) throw new Error(error.message)
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+      try {
+        const data = await crm.post(`api-campaigns?action=resume&id=${encodeURIComponent(id)}`, {})
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        }
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : String(err))
       }
     }
   )
@@ -195,16 +143,13 @@ export function registerCampaignTools(server: McpServer, ctx: CRMContext) {
         }
       }
 
-      const { data, error } = await ctx.supabase
-        .from('campaigns')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single()
-
-      if (error) throw new Error(error.message)
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+      try {
+        const data = await crm.patch('api-campaigns', { id }, updates)
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        }
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : String(err))
       }
     }
   )
@@ -215,58 +160,13 @@ export function registerCampaignTools(server: McpServer, ctx: CRMContext) {
     'Enroll leads into a campaign by their IDs.',
     { campaignId: z.string(), leadIds: z.array(z.string()) },
     async ({ campaignId, leadIds }) => {
-      const { data: leads, error: leadsError } = await ctx.supabase
-        .from('leads')
-        .select('id, email')
-        .in('id', leadIds)
-
-      if (leadsError) throw new Error(leadsError.message)
-      if (!leads || leads.length === 0) {
+      try {
+        const data = await crm.post(`api-campaigns?action=enroll&id=${encodeURIComponent(campaignId)}`, { leadIds })
         return {
-          content: [{ type: 'text' as const, text: 'No matching leads found.' }],
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
         }
-      }
-
-      const enrollmentRows = leads.map((lead) => ({
-        campaign_id: campaignId,
-        lead_id: lead.id,
-        email: lead.email,
-        status: 'pending',
-        current_step: 0,
-      }))
-
-      const { error: enrollError } = await ctx.supabase
-        .from('campaign_enrollments')
-        .insert(enrollmentRows)
-
-      if (enrollError) throw new Error(enrollError.message)
-
-      const enrolledIds = leads.map((l) => l.id)
-      const { data: campaign, error: campaignError } = await ctx.supabase
-        .from('campaigns')
-        .select('recipient_ids')
-        .eq('id', campaignId)
-        .single()
-
-      if (campaignError) throw new Error(campaignError.message)
-
-      const existingIds: string[] = campaign.recipient_ids ?? []
-      const mergedIds = Array.from(new Set([...existingIds, ...enrolledIds]))
-
-      const { error: updateError } = await ctx.supabase
-        .from('campaigns')
-        .update({ recipient_ids: mergedIds })
-        .eq('id', campaignId)
-
-      if (updateError) throw new Error(updateError.message)
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: `Enrolled ${leads.length} lead(s) into campaign ${campaignId}.`,
-          },
-        ],
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : String(err))
       }
     }
   )
@@ -277,36 +177,13 @@ export function registerCampaignTools(server: McpServer, ctx: CRMContext) {
     'Get enrollment and email engagement stats for a campaign.',
     { id: z.string() },
     async ({ id }) => {
-      const { data: enrollments, error: enrollError } = await ctx.supabase
-        .from('campaign_enrollments')
-        .select('status')
-        .eq('campaign_id', id)
-
-      if (enrollError) throw new Error(enrollError.message)
-
-      const enrollmentCounts: Record<string, number> = {}
-      for (const e of enrollments ?? []) {
-        enrollmentCounts[e.status] = (enrollmentCounts[e.status] ?? 0) + 1
-      }
-
-      const { data: emails, error: emailError } = await ctx.supabase
-        .from('emails')
-        .select('opened_at, clicked_at, bounced_at')
-        .eq('campaign_id', id)
-        .eq('direction', 'outbound')
-
-      if (emailError) throw new Error(emailError.message)
-
-      const emailStats = {
-        sent: emails?.length ?? 0,
-        opened: emails?.filter((e) => e.opened_at).length ?? 0,
-        clicked: emails?.filter((e) => e.clicked_at).length ?? 0,
-        bounced: emails?.filter((e) => e.bounced_at).length ?? 0,
-      }
-
-      const result = { enrollmentCounts, emailStats }
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      try {
+        const data = await crm.get('api-campaigns', { stats: id })
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        }
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : String(err))
       }
     }
   )
@@ -325,34 +202,15 @@ export function registerCampaignTools(server: McpServer, ctx: CRMContext) {
       ),
     },
     async ({ steps }) => {
-      const { data: sequence, error: seqError } = await ctx.supabase
-        .from('campaign_sequences')
-        .insert({
-          name: `Sequence ${Date.now()}`,
-          created_by: ctx.userId,
+      try {
+        const data = await crm.post('api-campaigns?action=sequence', {
+          steps: steps.map((s) => ({ subject: s.subject, body: s.body, delayDays: s.delayDays })),
         })
-        .select()
-        .single()
-
-      if (seqError) throw new Error(seqError.message)
-
-      const stepRows = steps.map((s, i) => ({
-        sequence_id: sequence.id,
-        order: i,
-        subject: s.subject,
-        body: s.body,
-        delay_days: s.delayDays,
-      }))
-
-      const { error: stepsError } = await ctx.supabase
-        .from('campaign_steps')
-        .insert(stepRows)
-
-      if (stepsError) throw new Error(stepsError.message)
-
-      const result = { sequenceId: sequence.id, stepsCreated: steps.length }
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+        }
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : String(err))
       }
     }
   )

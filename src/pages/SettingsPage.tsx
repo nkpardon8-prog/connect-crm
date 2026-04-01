@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProfiles } from '@/hooks/use-profiles';
 import { createInvite, deleteMember } from '@/lib/api/team';
+import { getApiKeys, revokeApiKey, type ApiKey } from '@/lib/api/api-keys';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -13,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { User, Shield, Plug, Trash2, Mail, Copy, RotateCcw } from 'lucide-react';
+import { User, Shield, Plug, Trash2, Mail, Copy, RotateCcw, Key } from 'lucide-react';
 
 export default function SettingsPage() {
   const { user, isAdmin, refreshUser } = useAuth();
@@ -36,8 +37,32 @@ export default function SettingsPage() {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // API keys state
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([])
+  const [apiKeyLoading, setApiKeyLoading] = useState(false)
+  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false)
+  const [newApiKeyName, setNewApiKeyName] = useState('')
+  const [generatedApiKey, setGeneratedApiKey] = useState<string | null>(null)
+  const [generatingApiKey, setGeneratingApiKey] = useState(false)
+
   // Warmup state
   const [warmupFirstEmail, setWarmupFirstEmail] = useState<string | null>(null)
+
+  useEffect(() => {
+    loadApiKeys()
+  }, [])
+
+  const loadApiKeys = async () => {
+    setApiKeyLoading(true)
+    try {
+      const keys = await getApiKeys()
+      setApiKeys(keys)
+    } catch (err) {
+      toast.error('Failed to load API keys')
+    } finally {
+      setApiKeyLoading(false)
+    }
+  }
 
   useEffect(() => {
     supabase.from('warmup_state').select('*').eq('id', 'default').maybeSingle()
@@ -84,6 +109,48 @@ export default function SettingsPage() {
       setDeleteLoading(false);
     }
   };
+
+  const handleGenerateApiKey = async () => {
+    setGeneratingApiKey(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-api-key`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session?.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: newApiKeyName }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error ?? 'Failed to generate API key')
+        return
+      }
+      setGeneratedApiKey(data.key)
+      await loadApiKeys()
+    } catch (err) {
+      toast.error('Failed to generate API key')
+    } finally {
+      setGeneratingApiKey(false)
+    }
+  }
+
+  const handleRevokeApiKey = async (id: string) => {
+    try {
+      await revokeApiKey(id)
+      setApiKeys(prev => prev.filter(k => k.id !== id))
+      toast.success('API key revoked')
+    } catch {
+      toast.error('Failed to revoke API key')
+    }
+  }
+
+  const resetApiKeyDialog = () => {
+    setShowApiKeyDialog(false)
+    setNewApiKeyName('')
+    setGeneratedApiKey(null)
+  }
 
   const handleSave = async () => {
     if (!user) return;
@@ -251,6 +318,51 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* API Keys */}
+      <Card className="border shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Key className="h-4 w-4" /> API Keys
+            </CardTitle>
+            <Button size="sm" variant="outline" onClick={() => setShowApiKeyDialog(true)}>
+              Generate Key
+            </Button>
+          </div>
+          <CardDescription>Connect agents and external tools to your CRM</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {apiKeyLoading ? (
+            <p className="text-sm text-muted-foreground">Loading...</p>
+          ) : apiKeys.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No API keys yet. Generate one to connect an agent.</p>
+          ) : (
+            <div className="space-y-2">
+              {apiKeys.map(key => (
+                <div key={key.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">{key.name}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{key.keyPreview}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Created {new Date(key.createdAt).toLocaleDateString()}
+                      {key.lastUsedAt ? ` · Last used ${new Date(key.lastUsedAt).toLocaleDateString()}` : ' · Never used'}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => handleRevokeApiKey(key.id)}
+                  >
+                    Revoke
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Invite Dialog */}
       <Dialog open={showInviteDialog} onOpenChange={open => { if (!open) resetInviteDialog(); else setShowInviteDialog(true); }}>
         <DialogContent>
@@ -295,6 +407,53 @@ export default function SettingsPage() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={resetInviteDialog}>Done</Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* API Key Generate Dialog */}
+      <Dialog open={showApiKeyDialog} onOpenChange={open => { if (!open) resetApiKeyDialog(); else setShowApiKeyDialog(true); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate API Key</DialogTitle>
+            <DialogDescription>Give this key a name so you can identify it later</DialogDescription>
+          </DialogHeader>
+          {!generatedApiKey ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Key Name</Label>
+                <Input
+                  placeholder="e.g., Claude Agent"
+                  value={newApiKeyName}
+                  onChange={e => setNewApiKeyName(e.target.value)}
+                />
+              </div>
+              <DialogFooter>
+                <Button
+                  onClick={handleGenerateApiKey}
+                  disabled={generatingApiKey || !newApiKeyName.trim()}
+                >
+                  {generatingApiKey ? 'Generating...' : 'Generate Key'}
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-amber-600 font-medium">Store this key — it won't be shown again.</p>
+              <div className="flex items-center gap-2">
+                <Input value={generatedApiKey} readOnly className="font-mono text-xs" />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => { navigator.clipboard.writeText(generatedApiKey); toast.success('API key copied'); }}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={resetApiKeyDialog}>Done</Button>
               </DialogFooter>
             </div>
           )}
