@@ -331,13 +331,30 @@ export default function SettingsPage() {
           </div>
           <CardDescription>Connect agents and external tools to your CRM</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">API URL</p>
+            <div className="flex items-center gap-2">
+              <Input
+                value={`${import.meta.env.VITE_SUPABASE_URL}/functions/v1`}
+                readOnly
+                className="font-mono text-xs"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => { navigator.clipboard.writeText(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1`); toast.success('URL copied'); }}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
           {apiKeyLoading ? (
             <p className="text-sm text-muted-foreground">Loading...</p>
           ) : apiKeys.length === 0 ? (
             <p className="text-sm text-muted-foreground">No API keys yet. Generate one to connect an agent.</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 pt-1">
               {apiKeys.map(key => (
                 <div key={key.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
                   <div className="flex-1 min-w-0">
