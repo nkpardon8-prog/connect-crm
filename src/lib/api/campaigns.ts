@@ -135,6 +135,43 @@ export async function getEnrollments(campaignId: string) {
   return transformRows<{ id: string; campaignId: string; leadId: string | null; email: string; status: string; sentAt: string | null }>(data || []);
 }
 
+export async function getEnrollmentLeadIdsByStatus(
+  userId: string
+): Promise<{ contacted: Set<string>; pending: Set<string> }> {
+  // Step 1: get the current user's campaign IDs
+  const { data: campaignRows, error: campErr } = await supabase
+    .from('campaigns')
+    .select('id')
+    .eq('user_id', userId)
+    .is('deleted_at', null);
+  if (campErr) throw campErr;
+
+  const campaignIds = (campaignRows ?? []).map(c => c.id);
+  if (campaignIds.length === 0) {
+    return { contacted: new Set(), pending: new Set() };
+  }
+
+  // Step 2: fetch all enrollments for those campaigns
+  const { data, error } = await supabase
+    .from('campaign_enrollments')
+    .select('lead_id, status')
+    .in('campaign_id', campaignIds)
+    .not('lead_id', 'is', null);
+  if (error) throw error;
+
+  const contacted = new Set<string>();
+  const pending = new Set<string>();
+  for (const row of data ?? []) {
+    if (!row.lead_id) continue;
+    if (row.status === 'pending') {
+      pending.add(row.lead_id);
+    } else {
+      contacted.add(row.lead_id);
+    }
+  }
+  return { contacted, pending };
+}
+
 export async function getCampaignABAnalytics(campaignId: string) {
   const { data: enrollments } = await supabase
     .from('campaign_enrollments')

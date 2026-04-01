@@ -18,6 +18,17 @@ export async function getEmails(userId?: string): Promise<EmailMessage[]> {
   return transformRows<EmailMessage>(data || []);
 }
 
+export async function getOutboundEmailAddresses(userId: string): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('emails')
+    .select('to')
+    .eq('direction', 'outbound')
+    .eq('user_id', userId)
+    .is('deleted_at', null);
+  if (error) throw error;
+  return new Set((data ?? []).map(e => e.to));
+}
+
 export async function getEmail(id: string): Promise<EmailMessage | null> {
   const { data, error } = await supabase
     .from('emails')
