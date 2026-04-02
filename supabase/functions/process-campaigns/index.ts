@@ -2,6 +2,7 @@ import { corsHeaders } from '../_shared/cors.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { writeAlert } from '../_shared/alerts.ts'
 import { plainTextToHtml } from '../_shared/html.ts'
+import { getMaxDailyAllowed } from '../_shared/warmup.ts'
 
 const EMAIL_DOMAIN = 'integrateapi.ai'
 const CAMPAIGN_DOMAIN = 'mail.integrateapi.ai'
@@ -35,18 +36,6 @@ function calculateOptimalSendTime(timezone: string | null): Date | null {
     if (hoursUntilTarget < 1) return null // Close enough, send now
     return new Date(now.getTime() + hoursUntilTarget * 60 * 60 * 1000)
   } catch { return null }
-}
-
-// WARMUP TIERS — duplicated in src/pages/CampaignBuilderPage.tsx
-// Keep both in sync when modifying.
-function getMaxDailyAllowed(daysSinceFirstEmail: number): number {
-  if (daysSinceFirstEmail >= 91) return 200
-  if (daysSinceFirstEmail >= 61) return 150
-  if (daysSinceFirstEmail >= 31) return 100
-  if (daysSinceFirstEmail >= 22) return 75
-  if (daysSinceFirstEmail >= 15) return 50
-  if (daysSinceFirstEmail >= 8) return 25
-  return 20
 }
 
 Deno.serve(async (req) => {
@@ -85,14 +74,12 @@ Deno.serve(async (req) => {
       console.log('Warmup initialized: first campaign email')
     }
 
-    // Get today's sent count
+    // Quick non-locking check for early exit
     const { data: logRow } = await supabaseAdmin.from('email_send_log')
       .select('emails_sent').eq('send_date', today).maybeSingle()
-    let todaySent = logRow?.emails_sent || 0
-    let remainingBudget = Math.max(0, maxDailyAllowed - todaySent)
-
-    if (remainingBudget <= 0) {
-      console.log(`Daily limit reached (${todaySent}/${maxDailyAllowed}), skipping all campaigns`)
+    const currentSent = logRow?.emails_sent || 0
+    if (currentSent >= maxDailyAllowed) {
+      console.log(`Daily limit reached (${currentSent}/${maxDailyAllowed}), skipping all campaigns`)
       return new Response(JSON.stringify({ processed: 0, dailyLimitReached: true }), {
         headers: { 'Content-Type': 'application/json' },
       })
@@ -128,8 +115,8 @@ Deno.serve(async (req) => {
 
     for (const campaign of uniqueCampaigns) {
       const campaignDailyLimit = campaign.daily_send_limit || 100
-      const batchSize = Math.min(remainingBudget, campaignDailyLimit, 100)
-      if (batchSize <= 0) continue
+      const fetchSize = Math.min(campaignDailyLimit, 100)
+      if (fetchSize <= 0) continue
 
       // Get pending enrollments
       const { data: enrollmentsData } = await supabaseAdmin
@@ -138,7 +125,7 @@ Deno.serve(async (req) => {
         .eq('campaign_id', campaign.id)
         .eq('status', 'pending')
         .or(`next_send_at.is.null,next_send_at.lte.${new Date().toISOString()}`)
-        .limit(batchSize) // Process in chunks to avoid timeout
+        .limit(fetchSize) // Process in chunks to avoid timeout
       let enrollments = enrollmentsData
 
       if (!enrollments?.length) {
@@ -290,6 +277,25 @@ Deno.serve(async (req) => {
         }
       })
 
+      // Atomically claim exactly the number of emails we're about to send
+      if (resendEmails.length > 0) {
+        const { data: grantedSlots, error: claimError } = await supabaseAdmin.rpc('claim_daily_send_budget', {
+          p_date: today,
+          p_max: maxDailyAllowed,
+          p_requested: resendEmails.length,
+        })
+        if (claimError) throw claimError
+        if (!grantedSlots || grantedSlots <= 0) {
+          console.log('Daily cap reached mid-campaign, stopping')
+          break
+        }
+        // If cap only allows fewer than we built (race), trim the batch
+        if (grantedSlots < resendEmails.length) {
+          resendEmails.splice(grantedSlots)
+          enrollments = enrollments.slice(0, grantedSlots)
+        }
+      }
+
       // Send via Resend batch API (chunks of 100)
       for (let i = 0; i < resendEmails.length; i += 100) {
         const chunk = resendEmails.slice(i, i + 100)
@@ -365,14 +371,6 @@ Deno.serve(async (req) => {
               await supabaseAdmin.from('activities').insert(activityRows)
             }
           } catch (e) { console.error('Activity creation failed:', e) }
-
-          // Update daily send count
-          todaySent += chunk.length
-          remainingBudget -= chunk.length
-          await supabaseAdmin.from('email_send_log').upsert({
-            send_date: today,
-            emails_sent: todaySent,
-          })
         } else {
           const error = await res.text()
           const status = res.status
@@ -419,12 +417,6 @@ Deno.serve(async (req) => {
       .limit(50)
 
     for (const enrollment of dueEnrollments || []) {
-      // Check daily budget before drip send
-      if (remainingBudget <= 0) {
-        console.log('Daily limit reached during drip processing, stopping')
-        break
-      }
-
       // Fetch the campaign
       const { data: campaign } = await supabaseAdmin
         .from('campaigns')
@@ -486,6 +478,18 @@ Deno.serve(async (req) => {
         const token = crypto.randomUUID()
         emailBody = emailBody.replace(/\{\{unsubscribeLink\}\}/g,
           `${SITE_URL}/unsubscribe/${token}?email=${encodeURIComponent(enrollment.email)}`)
+      }
+
+      // Atomically claim 1 slot for this drip email
+      const { data: grantedDrip, error: dripClaimError } = await supabaseAdmin.rpc('claim_daily_send_budget', {
+        p_date: today,
+        p_max: maxDailyAllowed,
+        p_requested: 1,
+      })
+      if (dripClaimError) throw dripClaimError
+      if (!grantedDrip || grantedDrip <= 0) {
+        console.log('Daily cap reached during drip processing, stopping')
+        break
       }
 
       // Send via Resend
@@ -569,13 +573,6 @@ Deno.serve(async (req) => {
             .update({ status: 'sent', sent_at: new Date().toISOString(), next_send_at: null })
             .eq('id', enrollment.id)
         }
-
-        todaySent += 1
-        remainingBudget -= 1
-        await supabaseAdmin.from('email_send_log').upsert({
-          send_date: today,
-          emails_sent: todaySent,
-        })
 
         dripProcessed++
       } else {

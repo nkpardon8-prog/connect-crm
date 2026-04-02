@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { writeAlert } from '../_shared/alerts.ts'
 import { plainTextToHtml } from '../_shared/html.ts'
 import { resolveUser } from '../_shared/auth.ts'
+import { getMaxDailyAllowed } from '../_shared/warmup.ts'
 
 const EMAIL_DOMAIN = 'integrateapi.ai'
 
@@ -51,6 +52,43 @@ Deno.serve(async (req) => {
     const validFrom = `${user.emailPrefix}@${EMAIL_DOMAIN}`
     const senderName = user.name
 
+    // --- Daily send cap enforcement ---
+    const today = new Date().toISOString().split('T')[0]
+    const { data: warmup } = await supabaseAdmin.from('warmup_state')
+      .select('first_email_at').eq('id', 'default').maybeSingle()
+    const firstEmailAt = warmup?.first_email_at ? new Date(warmup.first_email_at) : null
+    const daysSinceFirstEmail = firstEmailAt
+      ? Math.floor((Date.now() - firstEmailAt.getTime()) / (24 * 60 * 60 * 1000))
+      : 0
+    const maxDailyAllowed = getMaxDailyAllowed(daysSinceFirstEmail)
+
+    const { data: grantedSlots, error: claimError } = await supabaseAdmin.rpc('claim_daily_send_budget', {
+      p_date: today,
+      p_max: maxDailyAllowed,
+      p_requested: emails.length,
+    })
+    if (claimError) {
+      console.error('Failed to claim send budget:', claimError)
+      return new Response(
+        JSON.stringify({ error: 'Internal error checking send limit' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (!grantedSlots || grantedSlots <= 0) {
+      return new Response(
+        JSON.stringify({ error: 'Daily send limit reached. Sends will resume tomorrow.' }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // If near the cap, trim to however many slots were granted
+    const emailsToProcess = grantedSlots < emails.length
+      ? emails.slice(0, grantedSlots)
+      : emails
+    const capReached = grantedSlots < emails.length
+    // --- End cap enforcement ---
+
     // Helper: get threading headers for replies
     async function getThreadingHeaders(threadId?: string, replyToId?: string) {
       if (!replyToId || !threadId) return {}
@@ -83,9 +121,9 @@ Deno.serve(async (req) => {
     const results: unknown[] = []
     let failedCount = 0
 
-    if (emails.length === 1) {
+    if (emailsToProcess.length === 1) {
       // Single send (compose or reply)
-      const email = emails[0]
+      const email = emailsToProcess[0]
       const threadingHeaders = await getThreadingHeaders(email.threadId, email.replyToId)
 
       // Generate threadId if not provided
@@ -147,8 +185,8 @@ Deno.serve(async (req) => {
 
     } else {
       // Batch send (campaigns) — chunks of 100
-      for (let i = 0; i < emails.length; i += 100) {
-        const chunk = emails.slice(i, i + 100)
+      for (let i = 0; i < emailsToProcess.length; i += 100) {
+        const chunk = emailsToProcess.slice(i, i + 100)
         // Resolve unsubscribe links per recipient before sending
         const resolvedBodies: string[] = chunk.map((email: Record<string, string>) => {
           let emailBody = email.body
@@ -215,13 +253,20 @@ Deno.serve(async (req) => {
         if (dbErr) console.error('DB batch insert failed:', dbErr)
         results.push(...(inserted || []))
 
-        if (i + 100 < emails.length) await new Promise(r => setTimeout(r, 250))
+        if (i + 100 < emailsToProcess.length) await new Promise(r => setTimeout(r, 250))
       }
     }
 
-    return new Response(JSON.stringify({ emails: results, count: results.length, failedCount }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    return new Response(
+      JSON.stringify({
+        emails: results,
+        count: results.length,
+        failedCount,
+        capReached,
+        skipped: emails.length - emailsToProcess.length,
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    )
   } catch (err) {
     console.error('send-email error:', err)
     return new Response(
