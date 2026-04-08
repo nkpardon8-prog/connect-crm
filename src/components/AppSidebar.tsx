@@ -1,5 +1,6 @@
 import {
   LayoutDashboard,
+  ListTodo,
   Users,
   Sparkles,
   Mail,
@@ -24,6 +25,7 @@ import {
 import { Button } from '@/components/ui/button';
 
 const navItems = [
+  { title: 'To-Do', url: '/todos', icon: ListTodo },
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
   { title: 'Leads', url: '/leads', icon: Users },
   { title: 'Lead Generator', url: '/generator', icon: Sparkles },

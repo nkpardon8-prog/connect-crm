@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Users, Phone, Mail, TrendingUp, DollarSign } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts';
 import EngagementLeaderboard from '@/components/campaigns/EngagementLeaderboard';
+import { TodoDashboardWidgets } from '@/components/todo/TodoDashboardWidgets';
 
 const statusColors: Record<string, string> = {
   cold: 'hsl(217.2 91.2% 59.8%)',
@@ -102,6 +103,9 @@ export default function DashboardPage() {
           {isAdmin ? 'Overview of all team activity' : 'Your personal performance overview'}
         </p>
       </div>
+
+      {/* To-Do widgets */}
+      <TodoDashboardWidgets />
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">

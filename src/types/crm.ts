@@ -166,3 +166,79 @@ export interface SearchHistory {
   imported: boolean;
   createdAt: string;
 }
+
+// === To-Do & Projects ===
+
+export type TodoPriority = 'urgent' | 'normal' | 'low';
+export type TodoStatus = 'active' | 'completed';
+export type ProjectStatus = 'active' | 'completed' | 'archived';
+export type RecurrencePattern = 'daily' | 'weekly' | 'monthly';
+export type TodoActionType =
+  | 'created'
+  | 'assigned'
+  | 'reassigned'
+  | 'completed'
+  | 'reopened'
+  | 'commented'
+  | 'pinned'
+  | 'unpinned'
+  | 'priority_changed'
+  | 'edited';
+
+export interface Todo {
+  id: string;
+  title: string;
+  summary: string | null;
+  details: string | null;
+  priority: TodoPriority;
+  dueDate: string;
+  status: TodoStatus;
+  assignedTo: string | null;
+  createdBy: string;
+  projectId: string | null;
+  isPinned: boolean;
+  isRecurring: boolean;
+  recurrencePattern: RecurrencePattern | null;
+  parentTodoId: string | null;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+}
+
+export interface Project {
+  id: string;
+  title: string;
+  goal: string | null;
+  outcomes: string | null;
+  notes: string | null;
+  status: ProjectStatus;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TodoComment {
+  id: string;
+  todoId: string;
+  authorId: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface TodoActivityEntry {
+  id: string;
+  todoId: string;
+  actorId: string;
+  actionType: TodoActionType;
+  details: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface TodoColumn {
+  id: string;
+  userId: string;
+  profileId: string;
+  position: number;
+  createdAt: string;
+}
