@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
-import { CSS } from '@dnd-kit/utilities';
 import { motion } from 'framer-motion';
 import { format, isPast, isToday } from 'date-fns';
 import { CheckCircle2, Pin } from 'lucide-react';
@@ -41,7 +40,7 @@ export function TodoCard({ todo, isDragOverlay, projectName }: TodoCardProps) {
     setNodeRef,
     transform,
     isDragging,
-  } = useDraggable({ id: todo.id });
+  } = useDraggable({ id: todo.id, disabled: todo.status === 'completed' });
 
   const style = transform
     ? { transform: `translate(${transform.x}px, ${transform.y}px)` }
