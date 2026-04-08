@@ -25,8 +25,8 @@ import {
 import { Button } from '@/components/ui/button';
 
 const navItems = [
-  { title: 'To-Do', url: '/todos', icon: ListTodo },
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+  { title: 'To-Do', url: '/todos', icon: ListTodo },
   { title: 'Leads', url: '/leads', icon: Users },
   { title: 'Lead Generator', url: '/generator', icon: Sparkles },
   { title: 'Outreach', url: '/outreach', icon: Mail },

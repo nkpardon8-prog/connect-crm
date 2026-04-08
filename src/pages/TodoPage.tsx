@@ -71,6 +71,19 @@ export default function TodoPage() {
     setActiveDragId(event.active.id as string);
   }
 
+  // Resolve a drop target ID to a profile ID or 'unassigned'
+  function resolveDropTarget(targetId: string): string | null {
+    if (targetId === 'unassigned') return 'unassigned';
+    // Direct column hit — targetId is a profile ID
+    if (columns.some(c => c.profileId === targetId)) return targetId;
+    // Hit a card inside a column — find which column owns that card
+    const targetTodo = todos.find(t => t.id === targetId);
+    if (targetTodo?.assignedTo) return targetTodo.assignedTo;
+    // Hit an unassigned card
+    if (targetTodo && targetTodo.assignedTo === null) return 'unassigned';
+    return null;
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || !user) {
@@ -79,13 +92,14 @@ export default function TodoPage() {
     }
 
     const todoId = active.id as string;
-    const targetId = over.id as string;
     const todo = todos.find(t => t.id === todoId);
-
     if (!todo) { setActiveDragId(null); return; }
 
+    const resolvedTarget = resolveDropTarget(over.id as string);
+    if (!resolvedTarget) { setActiveDragId(null); return; }
+
     // Drop on unassigned zone
-    if (targetId === 'unassigned') {
+    if (resolvedTarget === 'unassigned') {
       if (todo.assignedTo !== null) {
         updateTodo(todoId, { assignedTo: null });
         logActivity(todoId, user.id, 'reassigned', { from: todo.assignedTo, to: null });
@@ -95,10 +109,10 @@ export default function TodoPage() {
     }
 
     // Drop on a person column
-    if (todo.assignedTo !== targetId) {
+    if (todo.assignedTo !== resolvedTarget) {
       const actionType = todo.assignedTo === null ? 'assigned' : 'reassigned';
-      updateTodo(todoId, { assignedTo: targetId });
-      logActivity(todoId, user.id, actionType, { from: todo.assignedTo, to: targetId });
+      updateTodo(todoId, { assignedTo: resolvedTarget });
+      logActivity(todoId, user.id, actionType, { from: todo.assignedTo, to: resolvedTarget });
     }
     setActiveDragId(null);
   }

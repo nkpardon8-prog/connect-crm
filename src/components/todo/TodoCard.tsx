@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSortable } from '@dnd-kit/sortable';
+import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { motion } from 'framer-motion';
 import { format, isPast, isToday } from 'date-fns';
@@ -40,14 +40,12 @@ export function TodoCard({ todo, isDragOverlay, projectName }: TodoCardProps) {
     listeners,
     setNodeRef,
     transform,
-    transition,
     isDragging,
-  } = useSortable({ id: todo.id });
+  } = useDraggable({ id: todo.id });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+  const style = transform
+    ? { transform: `translate(${transform.x}px, ${transform.y}px)` }
+    : undefined;
 
   const isCompleted = todo.status === 'completed';
   const isOverdue = !isCompleted && !!todo.dueDate && isPast(new Date(todo.dueDate)) && !isToday(new Date(todo.dueDate));
@@ -80,17 +78,17 @@ export function TodoCard({ todo, isDragOverlay, projectName }: TodoCardProps) {
         style={isDragOverlay ? undefined : style}
         {...(isDragOverlay ? {} : attributes)}
         {...(isDragOverlay ? {} : listeners)}
-        layout
+        layout={!isDragOverlay}
         initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: isCompleted ? 0.5 : 1, y: 0 }}
+        animate={{ opacity: isCompleted ? 0.5 : isDragging ? 0.4 : 1, y: 0 }}
         className={cn(
           'relative cursor-grab rounded-lg border border-l-[3px] bg-card p-3 shadow-sm transition-shadow hover:shadow-md',
           priorityColors[todo.priority],
           todo.priority === 'urgent' && !isCompleted && 'bg-red-50/50',
           isOverdue && 'ring-1 ring-red-300 bg-red-50/30',
-          isDragging && 'opacity-50',
+          isDragging && 'opacity-40',
         )}
-        onClick={() => setSheetOpen(true)}
+        onClick={() => !isDragging && setSheetOpen(true)}
       >
         <Button
           variant="ghost"

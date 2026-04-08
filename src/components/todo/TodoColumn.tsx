@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useDroppable } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -30,7 +29,7 @@ function sortActiveTodos(todos: Todo[]): Todo[] {
 
 export function TodoColumn({ profileId, profile, todos, projects, onRemoveColumn }: TodoColumnProps) {
   const [showAllCompleted, setShowAllCompleted] = useState(false);
-  const { setNodeRef } = useDroppable({ id: profileId });
+  const { setNodeRef, isOver } = useDroppable({ id: profileId });
 
   const activeTodos = sortActiveTodos(todos.filter((t) => t.status === 'active'));
   const completedTodos = todos.filter((t) => t.status === 'completed');
@@ -50,7 +49,13 @@ export function TodoColumn({ profileId, profile, todos, projects, onRemoveColumn
   }
 
   return (
-    <div className="relative min-h-[400px] rounded-xl border bg-card p-4">
+    <div
+      ref={setNodeRef}
+      className={cn(
+        'relative min-h-[400px] rounded-xl border bg-card p-4 transition-colors',
+        isOver && 'ring-2 ring-primary/40 bg-primary/5',
+      )}
+    >
       <div className="mb-3 flex items-center gap-2">
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
           {initials}
@@ -67,12 +72,20 @@ export function TodoColumn({ profileId, profile, todos, projects, onRemoveColumn
         </Button>
       </div>
 
-      <div ref={setNodeRef} className="space-y-2">
-        <SortableContext items={activeTodos.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-          {activeTodos.map((todo) => (
-            <TodoCard key={todo.id} todo={todo} projectName={projectName(todo.projectId)} />
-          ))}
-        </SortableContext>
+      <div className="space-y-2">
+        {activeTodos.map((todo) => (
+          <TodoCard key={todo.id} todo={todo} projectName={projectName(todo.projectId)} />
+        ))}
+        {activeTodos.length === 0 && !isOver && (
+          <p className="py-8 text-center text-xs text-muted-foreground">
+            Drop tasks here
+          </p>
+        )}
+        {isOver && (
+          <div className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-4 text-center text-xs text-primary">
+            Drop here to assign
+          </div>
+        )}
       </div>
 
       {completedTodos.length > 0 && (
