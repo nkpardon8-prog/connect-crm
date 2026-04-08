@@ -31,27 +31,31 @@ const emptyForm = {
 export function TodoCreateForm({ onSubmit, columns, profiles }: TodoCreateFormProps) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
-  const [enhancing, setEnhancing] = useState(false);
+  const [enhancing, setEnhancing] = useState<string | null>(null);
   const { user } = useAuth();
 
   function reset() {
     setForm({ ...emptyForm });
   }
 
-  async function handleAIEnhance() {
-    if (!form.details.trim()) return;
-    setEnhancing(true);
+  async function handleAIEnhance(field: 'summary' | 'details') {
+    const text = field === 'details' ? form.details : form.summary;
+    if (!text.trim()) return;
+    setEnhancing(field);
     try {
       const { data, error } = await supabase.functions.invoke('todo-ai-enhance', {
-        body: { text: form.details },
+        body: { text },
       });
       if (error) throw error;
-      setForm((prev) => ({ ...prev, details: data.enhanced }));
-      toast.success('Details enhanced');
-    } catch {
-      toast.error('Failed to enhance details');
+      if (data?.enhanced) {
+        setForm((prev) => ({ ...prev, [field]: data.enhanced }));
+        toast.success(`${field === 'details' ? 'Details' : 'Summary'} enhanced`);
+      }
+    } catch (err) {
+      console.error('AI enhance error:', err);
+      toast.error('Failed to enhance — check that the edge function is deployed');
     } finally {
-      setEnhancing(false);
+      setEnhancing(null);
     }
   }
 
@@ -61,7 +65,7 @@ export function TodoCreateForm({ onSubmit, columns, profiles }: TodoCreateFormPr
       summary: form.summary || null,
       details: form.details || null,
       priority: form.priority,
-      dueDate: form.dueDate,
+      dueDate: form.dueDate || null,
       status: 'active',
       assignedTo,
       createdBy: user?.id || '',
@@ -75,8 +79,8 @@ export function TodoCreateForm({ onSubmit, columns, profiles }: TodoCreateFormPr
   }
 
   function handleDone() {
-    if (!form.title || !form.dueDate) {
-      toast.error('Title and due date are required');
+    if (!form.title) {
+      toast.error('Title is required');
       return;
     }
     onSubmit(buildTodo(null));
@@ -85,8 +89,8 @@ export function TodoCreateForm({ onSubmit, columns, profiles }: TodoCreateFormPr
   }
 
   function handleApplyToAll() {
-    if (!form.title || !form.dueDate) {
-      toast.error('Title and due date are required');
+    if (!form.title) {
+      toast.error('Title is required');
       return;
     }
     const columnProfileIds = columns.map((c) => c.profileId);
@@ -122,7 +126,19 @@ export function TodoCreateForm({ onSubmit, columns, profiles }: TodoCreateFormPr
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="todo-summary">Summary</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="todo-summary">Summary</Label>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => handleAIEnhance('summary')}
+                disabled={enhancing !== null || !form.summary.trim()}
+              >
+                <Sparkles className="mr-1 h-3 w-3" />
+                {enhancing === 'summary' ? 'Enhancing...' : 'AI Enhance'}
+              </Button>
+            </div>
             <Input
               id="todo-summary"
               value={form.summary}
@@ -137,11 +153,11 @@ export function TodoCreateForm({ onSubmit, columns, profiles }: TodoCreateFormPr
                 variant="ghost"
                 size="sm"
                 className="h-7 text-xs"
-                onClick={handleAIEnhance}
-                disabled={enhancing || !form.details.trim()}
+                onClick={() => handleAIEnhance('details')}
+                disabled={enhancing !== null || !form.details.trim()}
               >
                 <Sparkles className="mr-1 h-3 w-3" />
-                {enhancing ? 'Enhancing...' : 'AI Enhance'}
+                {enhancing === 'details' ? 'Enhancing...' : 'AI Enhance'}
               </Button>
             </div>
             <Textarea
@@ -184,6 +200,7 @@ export function TodoCreateForm({ onSubmit, columns, profiles }: TodoCreateFormPr
           <div className="flex items-center gap-3">
             <Switch
               checked={form.isRecurring}
+              disabled={!form.dueDate}
               onCheckedChange={(v) => setForm((f) => ({ ...f, isRecurring: v, recurrencePattern: v ? 'weekly' : null }))}
             />
             <Label>Recurring</Label>

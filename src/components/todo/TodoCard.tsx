@@ -50,7 +50,7 @@ export function TodoCard({ todo, isDragOverlay, projectName }: TodoCardProps) {
   };
 
   const isCompleted = todo.status === 'completed';
-  const isOverdue = !isCompleted && isPast(new Date(todo.dueDate)) && !isToday(new Date(todo.dueDate));
+  const isOverdue = !isCompleted && !!todo.dueDate && isPast(new Date(todo.dueDate)) && !isToday(new Date(todo.dueDate));
 
   function handleTogglePin(e: React.MouseEvent) {
     e.stopPropagation();
@@ -120,9 +120,11 @@ export function TodoCard({ todo, isDragOverlay, projectName }: TodoCardProps) {
             {todo.priority}
           </Badge>
 
-          <span className={cn('text-[11px] text-muted-foreground', isOverdue && 'font-medium text-red-600')}>
-            {format(new Date(todo.dueDate), 'MMM d')}
-          </span>
+          {todo.dueDate && (
+            <span className={cn('text-[11px] text-muted-foreground', isOverdue && 'font-medium text-red-600')}>
+              {format(new Date(todo.dueDate), 'MMM d')}
+            </span>
+          )}
 
           {projectName && (
             <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[10px] px-1.5 py-0">

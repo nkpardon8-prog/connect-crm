@@ -22,7 +22,9 @@ function sortActiveTodos(todos: Todo[]): Todo[] {
   return [...todos].sort((a, b) => {
     if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
     if (a.priority !== b.priority) return priorityOrder[a.priority] - priorityOrder[b.priority];
-    return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    const aTime = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+    const bTime = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+    return aTime - bTime;
   });
 }
 

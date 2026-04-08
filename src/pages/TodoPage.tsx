@@ -3,6 +3,10 @@ import {
   DndContext,
   DragOverlay,
   pointerWithin,
+  useDroppable,
+  useSensor,
+  useSensors,
+  PointerSensor,
   type DragStartEvent,
   type DragEndEvent,
 } from '@dnd-kit/core';
@@ -28,9 +32,24 @@ import {
 import { UserPlus } from 'lucide-react';
 import type { Todo } from '@/types/crm';
 
+function UnassignedDropZone({ children }: { children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: 'unassigned' });
+  return (
+    <div ref={setNodeRef} className={cn('transition-colors', isOver && 'ring-2 ring-primary/30 rounded-lg')}>
+      {children}
+    </div>
+  );
+}
+
 export default function TodoPage() {
   const [view, setView] = useState<'tasks' | 'projects'>('tasks');
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    })
+  );
   const { todos, updateTodo, createTodo, logActivity, isLoading: todosLoading } = useTodos();
   const { projects, isLoading: projectsLoading } = useProjects();
   const { columns, addColumn, removeColumn, isLoading: columnsLoading } = useTodoColumns();
@@ -60,16 +79,26 @@ export default function TodoPage() {
     }
 
     const todoId = active.id as string;
-    const targetColumnProfileId = over.id as string;
-
+    const targetId = over.id as string;
     const todo = todos.find(t => t.id === todoId);
-    if (todo && todo.assignedTo !== targetColumnProfileId) {
+
+    if (!todo) { setActiveDragId(null); return; }
+
+    // Drop on unassigned zone
+    if (targetId === 'unassigned') {
+      if (todo.assignedTo !== null) {
+        updateTodo(todoId, { assignedTo: null });
+        logActivity(todoId, user.id, 'reassigned', { from: todo.assignedTo, to: null });
+      }
+      setActiveDragId(null);
+      return;
+    }
+
+    // Drop on a person column
+    if (todo.assignedTo !== targetId) {
       const actionType = todo.assignedTo === null ? 'assigned' : 'reassigned';
-      updateTodo(todoId, { assignedTo: targetColumnProfileId });
-      logActivity(todoId, user.id, actionType, {
-        from: todo.assignedTo,
-        to: targetColumnProfileId,
-      });
+      updateTodo(todoId, { assignedTo: targetId });
+      logActivity(todoId, user.id, actionType, { from: todo.assignedTo, to: targetId });
     }
     setActiveDragId(null);
   }
@@ -81,7 +110,7 @@ export default function TodoPage() {
       summary: todo.summary || null,
       details: todo.details || null,
       priority: todo.priority || 'normal',
-      dueDate: todo.dueDate || new Date().toISOString().split('T')[0],
+      dueDate: todo.dueDate || null,
       status: 'active',
       assignedTo: todo.assignedTo || null,
       createdBy: todo.createdBy || user.id,
@@ -146,6 +175,7 @@ export default function TodoPage() {
       {/* Tasks View */}
       {view === 'tasks' && (
         <DndContext
+          sensors={sensors}
           collisionDetection={pointerWithin}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
@@ -171,27 +201,30 @@ export default function TodoPage() {
             </div>
           )}
 
-          {/* Unassigned staging area */}
-          {unassignedTodos.length > 0 && (
+          {/* Unassigned staging area — always rendered as drop target */}
+          <UnassignedDropZone>
             <div>
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                Unassigned ({unassignedTodos.length})
+                Unassigned {unassignedTodos.length > 0 && `(${unassignedTodos.length})`}
               </h3>
               <div className="flex flex-wrap gap-2 p-3 rounded-lg border border-dashed bg-muted/30 min-h-[60px]">
-                {unassignedTodos.map(todo => (
-                  <div key={todo.id} className="w-[300px]">
-                    <TodoCard
-                      todo={todo}
-                      projectName={todo.projectId ? projectMap.get(todo.projectId) : undefined}
-                    />
-                  </div>
-                ))}
+                {unassignedTodos.length === 0 ? (
+                  <p className="text-xs text-muted-foreground self-center">
+                    New to-dos appear here. Drag onto a column to assign.
+                  </p>
+                ) : (
+                  unassignedTodos.map(todo => (
+                    <div key={todo.id} className="w-[300px]">
+                      <TodoCard
+                        todo={todo}
+                        projectName={todo.projectId ? projectMap.get(todo.projectId) : undefined}
+                      />
+                    </div>
+                  ))
+                )}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Drag onto a person's column to assign
-              </p>
             </div>
-          )}
+          </UnassignedDropZone>
 
           {/* Columns grid */}
           {columns.length === 0 && unassignedTodos.length === 0 && (

@@ -191,7 +191,7 @@ export interface Todo {
   summary: string | null;
   details: string | null;
   priority: TodoPriority;
-  dueDate: string;
+  dueDate: string | null;
   status: TodoStatus;
   assignedTo: string | null;
   createdBy: string;

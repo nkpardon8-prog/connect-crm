@@ -54,9 +54,9 @@ export function TodoDetailSheet({ todo, open, onOpenChange, projectName }: TodoD
   const [summary, setSummary] = useState(todo.summary || '');
   const [details, setDetails] = useState(todo.details || '');
   const [priority, setPriority] = useState<TodoPriority>(todo.priority);
-  const [dueDate, setDueDate] = useState(todo.dueDate);
+  const [dueDate, setDueDate] = useState(todo.dueDate || '');
   const [commentText, setCommentText] = useState('');
-  const [enhancing, setEnhancing] = useState(false);
+  const [enhancing, setEnhancing] = useState<string | null>(null);
 
   const timeline = useMemo<TimelineEntry[]>(() => {
     const entries: TimelineEntry[] = [
@@ -108,23 +108,28 @@ export function TodoDetailSheet({ todo, open, onOpenChange, projectName }: TodoD
 
   function handleDueDateChange(v: string) {
     setDueDate(v);
-    saveField('dueDate', v);
+    saveField('dueDate', v || null);
   }
 
-  async function handleAIEnhance() {
-    if (!details.trim()) return;
-    setEnhancing(true);
+  async function handleAIEnhance(field: 'summary' | 'details') {
+    const text = field === 'details' ? details : summary;
+    if (!text.trim()) return;
+    setEnhancing(field);
     try {
       const { data, error } = await supabase.functions.invoke('todo-ai-enhance', {
-        body: { text: details },
+        body: { text },
       });
       if (error) throw error;
-      setDetails(data.enhanced);
-      toast.success('Details enhanced');
-    } catch {
-      toast.error('Failed to enhance details');
+      if (data?.enhanced) {
+        if (field === 'details') setDetails(data.enhanced);
+        else setSummary(data.enhanced);
+        toast.success(`${field === 'details' ? 'Details' : 'Summary'} enhanced`);
+      }
+    } catch (err) {
+      console.error('AI enhance error:', err);
+      toast.error('Failed to enhance — check that the edge function is deployed');
     } finally {
-      setEnhancing(false);
+      setEnhancing(null);
     }
   }
 
@@ -158,14 +163,26 @@ export function TodoDetailSheet({ todo, open, onOpenChange, projectName }: TodoD
           <div className="flex items-center gap-2 pt-1">
             <Badge variant="outline" className="text-xs">{priority}</Badge>
             <span className="text-xs text-muted-foreground">
-              Due {format(new Date(dueDate), 'MMM d, yyyy')}
+              {dueDate ? `Due ${format(new Date(dueDate), 'MMM d, yyyy')}` : 'No due date'}
             </span>
           </div>
         </SheetHeader>
 
         <div className="mt-6 space-y-4">
           <div className="space-y-1.5">
-            <Label>Summary</Label>
+            <div className="flex items-center justify-between">
+              <Label>Summary</Label>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => handleAIEnhance('summary')}
+                disabled={enhancing !== null || !summary.trim()}
+              >
+                <Sparkles className="mr-1 h-3 w-3" />
+                {enhancing === 'summary' ? 'Enhancing...' : 'AI Enhance'}
+              </Button>
+            </div>
             <Input
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
@@ -180,11 +197,11 @@ export function TodoDetailSheet({ todo, open, onOpenChange, projectName }: TodoD
                 variant="ghost"
                 size="sm"
                 className="h-7 text-xs"
-                onClick={handleAIEnhance}
-                disabled={enhancing || !details.trim()}
+                onClick={() => handleAIEnhance('details')}
+                disabled={enhancing !== null || !details.trim()}
               >
                 <Sparkles className="mr-1 h-3 w-3" />
-                {enhancing ? 'Enhancing...' : 'AI Enhance'}
+                {enhancing === 'details' ? 'Enhancing...' : 'AI Enhance'}
               </Button>
             </div>
             <Textarea
