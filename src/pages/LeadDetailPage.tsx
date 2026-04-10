@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, Phone, Mail, MapPin, Building2, Users, Linkedin, Sparkles, Clock, MessageSquare, PhoneCall, MailOpen, Tag, X, Pencil, Save } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { incrementCallCount, incrementEmailCount } from '@/lib/api/leads';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -122,6 +123,7 @@ export default function LeadDetailPage() {
       timestamp: new Date().toISOString(),
     });
     updateLead(lead.id, { lastContactedAt: new Date().toISOString() });
+    incrementCallCount([lead.id]);
     window.location.href = `tel:${lead.phone}`;
   };
 
@@ -151,6 +153,7 @@ export default function LeadDetailPage() {
       timestamp: new Date().toISOString(),
     });
     updateLead(lead.id, { lastContactedAt: new Date().toISOString() });
+    incrementEmailCount([lead.id]);
     window.location.href = `mailto:${lead.email}`;
   };
 

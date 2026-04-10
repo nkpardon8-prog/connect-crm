@@ -73,6 +73,16 @@ export async function deleteLead(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function incrementCallCount(leadIds: string[], amount = 1): Promise<void> {
+  const { error } = await supabase.rpc('increment_call_count', { lead_ids: leadIds, amount });
+  if (error) throw error;
+}
+
+export async function incrementEmailCount(leadIds: string[], amount = 1): Promise<void> {
+  const { error } = await supabase.rpc('increment_email_count', { lead_ids: leadIds, amount });
+  if (error) throw error;
+}
+
 export async function mergePhoneReveals(leads: Array<{ apolloId?: string | null; phone?: string }>): Promise<void> {
   const apolloIds = leads.map(l => l.apolloId).filter(Boolean) as string[]
   if (apolloIds.length === 0) return

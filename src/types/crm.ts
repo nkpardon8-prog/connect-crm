@@ -32,6 +32,8 @@ export interface Lead {
   emailStatus?: string;
   timezone?: string;
   apolloId?: string;
+  callCount?: number;
+  emailCount?: number;
 }
 
 export type ActivityType = 'call' | 'email_sent' | 'email_received' | 'note' | 'status_change' | 'meeting';

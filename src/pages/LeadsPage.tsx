@@ -6,13 +6,15 @@ import { useProfiles } from '@/hooks/use-profiles';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEngagement } from '@/hooks/use-engagement';
 import type { LeadStatus } from '@/types/crm';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { incrementCallCount, incrementEmailCount } from '@/lib/api/leads';
 import { Search, Phone, Mail, Filter, Flame } from 'lucide-react';
 
 const statusConfig: Record<LeadStatus, { label: string; className: string }> = {
@@ -33,6 +35,8 @@ export default function LeadsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [industryFilter, setIndustryFilter] = useState<string>('all');
+  const [callCountFilter, setCallCountFilter] = useState<Set<string>>(new Set());
+  const [emailCountFilter, setEmailCountFilter] = useState<Set<string>>(new Set());
 
   const industries = useMemo(() =>
     [...new Set(leads.map(l => l.industry).filter(Boolean))].sort(),
@@ -40,10 +44,28 @@ export default function LeadsPage() {
   );
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
+  const COUNT_OPTIONS = ['0', '1', '2', '3', '4', '5+'] as const;
+
+  const toggleCountFilter = (value: string, setter: React.Dispatch<React.SetStateAction<Set<string>>>) => {
+    setter(prev => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value); else next.add(value);
+      return next;
+    });
+  };
+
+  const matchesCountFilter = (count: number, filter: Set<string>) => {
+    if (filter.size === 0) return true;
+    const bucket = count >= 5 ? '5+' : String(count);
+    return filter.has(bucket);
+  };
+
   const visibleLeads = useMemo(() => {
     let filtered = leads;
     if (statusFilter !== 'all') filtered = filtered.filter(l => l.status === statusFilter);
     if (industryFilter !== 'all') filtered = filtered.filter(l => l.industry === industryFilter);
+    if (callCountFilter.size > 0) filtered = filtered.filter(l => matchesCountFilter(l.callCount ?? 0, callCountFilter));
+    if (emailCountFilter.size > 0) filtered = filtered.filter(l => matchesCountFilter(l.emailCount ?? 0, emailCountFilter));
     if (search) {
       const q = search.toLowerCase();
       filtered = filtered.filter(l =>
@@ -53,7 +75,7 @@ export default function LeadsPage() {
       );
     }
     return filtered;
-  }, [leads, statusFilter, industryFilter, search]);
+  }, [leads, statusFilter, industryFilter, callCountFilter, emailCountFilter, search]);
 
   const toggleSelect = (id: string) => {
     setSelected(prev => {
@@ -83,6 +105,7 @@ export default function LeadsPage() {
       timestamp: new Date().toISOString(),
     });
     updateLead(leadId, { lastContactedAt: new Date().toISOString() });
+    incrementCallCount([leadId]);
     window.location.href = `tel:${phone}`;
   };
 
@@ -96,6 +119,7 @@ export default function LeadsPage() {
       timestamp: new Date().toISOString(),
     });
     updateLead(leadId, { lastContactedAt: new Date().toISOString() });
+    incrementEmailCount([leadId]);
     window.location.href = `mailto:${email}`;
   };
 
@@ -165,6 +189,54 @@ export default function LeadsPage() {
             ))}
           </SelectContent>
         </Select>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-9 gap-1.5">
+              <Phone className="h-3.5 w-3.5" />
+              Calls{callCountFilter.size > 0 && ` (${callCountFilter.size})`}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[160px] p-2" align="start">
+            {COUNT_OPTIONS.map(opt => (
+              <label key={opt} className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded">
+                <Checkbox
+                  checked={callCountFilter.has(opt)}
+                  onCheckedChange={() => toggleCountFilter(opt, setCallCountFilter)}
+                />
+                {opt === '0' ? 'Never' : opt === '5+' ? '5+ times' : `${opt} time${opt === '1' ? '' : 's'}`}
+              </label>
+            ))}
+            {callCountFilter.size > 0 && (
+              <Button variant="ghost" size="sm" className="w-full mt-1 text-xs" onClick={() => setCallCountFilter(new Set())}>
+                Clear
+              </Button>
+            )}
+          </PopoverContent>
+        </Popover>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-9 gap-1.5">
+              <Mail className="h-3.5 w-3.5" />
+              Emails{emailCountFilter.size > 0 && ` (${emailCountFilter.size})`}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[160px] p-2" align="start">
+            {COUNT_OPTIONS.map(opt => (
+              <label key={opt} className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded">
+                <Checkbox
+                  checked={emailCountFilter.has(opt)}
+                  onCheckedChange={() => toggleCountFilter(opt, setEmailCountFilter)}
+                />
+                {opt === '0' ? 'Never' : opt === '5+' ? '5+ times' : `${opt} time${opt === '1' ? '' : 's'}`}
+              </label>
+            ))}
+            {emailCountFilter.size > 0 && (
+              <Button variant="ghost" size="sm" className="w-full mt-1 text-xs" onClick={() => setEmailCountFilter(new Set())}>
+                Clear
+              </Button>
+            )}
+          </PopoverContent>
+        </Popover>
         {selected.size > 0 && (
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">{selected.size} selected</span>
@@ -190,6 +262,8 @@ export default function LeadsPage() {
                 <TableHead>Email</TableHead>
                 <TableHead>Email Status</TableHead>
                 <TableHead className="text-xs">Engagement</TableHead>
+                <TableHead className="text-xs">Calls</TableHead>
+                <TableHead className="text-xs">Emails</TableHead>
                 {isAdmin && <TableHead>Assigned</TableHead>}
                 <TableHead>Last Contact</TableHead>
               </TableRow>
@@ -245,6 +319,8 @@ export default function LeadsPage() {
                       </Badge>
                     ) : null}
                   </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{(lead.callCount ?? 0) >= 5 ? '5+' : lead.callCount ?? 0}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{(lead.emailCount ?? 0) >= 5 ? '5+' : lead.emailCount ?? 0}</TableCell>
                   {isAdmin && <TableCell className="text-sm">{getRepName(lead.assignedTo)}</TableCell>}
                   <TableCell className="text-sm text-muted-foreground">
                     {lead.lastContactedAt ? new Date(lead.lastContactedAt).toLocaleDateString() : 'Never'}

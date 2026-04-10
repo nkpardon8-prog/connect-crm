@@ -668,6 +668,8 @@ export type Database = {
           tags: string[]
           updated_at: string
           apollo_id: string | null
+          call_count: number
+          email_count: number
         }
         Insert: {
           assigned_to: string
@@ -692,6 +694,8 @@ export type Database = {
           tags?: string[]
           updated_at?: string
           apollo_id?: string | null
+          call_count?: number
+          email_count?: number
         }
         Update: {
           assigned_to?: string
@@ -716,6 +720,8 @@ export type Database = {
           tags?: string[]
           updated_at?: string
           apollo_id?: string | null
+          call_count?: number
+          email_count?: number
         }
         Relationships: [
           {

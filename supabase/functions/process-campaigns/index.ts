@@ -333,12 +333,16 @@ Deno.serve(async (req) => {
 
           await supabaseAdmin.from('emails').insert(emailRows)
 
-          // Update last_contacted_at on leads
+          // Update last_contacted_at and email_count on leads
           const contactedLeadIds = batchEnrollments.map(e => e.lead_id).filter(Boolean)
           if (contactedLeadIds.length) {
             await supabaseAdmin.from('leads')
               .update({ last_contacted_at: new Date().toISOString() })
               .in('id', contactedLeadIds)
+            await supabaseAdmin.rpc('increment_email_count', {
+              lead_ids: contactedLeadIds,
+              amount: 1,
+            })
           }
 
           // Update enrollments to 'sent', grouped by A/B variant
@@ -528,11 +532,15 @@ Deno.serve(async (req) => {
           user_id: campaign.sent_by,
         })
 
-        // Update last_contacted_at on lead
+        // Update last_contacted_at and email_count on lead
         if (enrollment.lead_id) {
           await supabaseAdmin.from('leads')
             .update({ last_contacted_at: new Date().toISOString() })
             .eq('id', enrollment.lead_id)
+          await supabaseAdmin.rpc('increment_email_count', {
+            lead_ids: [enrollment.lead_id],
+            amount: 1,
+          })
         }
 
         // Create activity record for drip email

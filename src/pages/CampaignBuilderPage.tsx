@@ -20,8 +20,6 @@ import TemplateEditor from '@/components/campaigns/TemplateEditor';
 import SequenceEditor from '@/components/campaigns/SequenceEditor';
 import ABVariantEditor from '@/components/campaigns/ABVariantEditor';
 import { searchApollo } from '@/lib/api/apollo';
-import { getEnrollmentLeadIdsByStatus } from '@/lib/api/campaigns';
-import { getOutboundEmailAddresses } from '@/lib/api/emails';
 import { applyMergeFields } from '@/lib/merge-fields';
 
 // WARMUP TIERS — duplicated in supabase/functions/process-campaigns/index.ts
@@ -71,10 +69,6 @@ export default function CampaignBuilderPage() {
   const [apolloCount, setApolloCount] = useState(25);
   const [apolloLoading, setApolloLoading] = useState(false);
 
-  const [contactedEmails, setContactedEmails] = useState<Set<string>>(new Set());
-  const [enrolledLeadIds, setEnrolledLeadIds] = useState<Set<string>>(new Set());
-  const [pendingLeadIds, setPendingLeadIds] = useState<Set<string>>(new Set());
-  const [contactHistoryLoaded, setContactHistoryLoaded] = useState(false);
 
   useEffect(() => {
     supabase.from('warmup_state').select('*').eq('id', 'default').maybeSingle()
@@ -86,20 +80,6 @@ export default function CampaignBuilderPage() {
       })
   }, [])
 
-  useEffect(() => {
-    if (!user?.id) return;
-    Promise.all([
-      getOutboundEmailAddresses(user.id),
-      getEnrollmentLeadIdsByStatus(user.id),
-    ]).then(([outboundEmails, { contacted, pending }]) => {
-      setContactedEmails(outboundEmails);
-      setEnrolledLeadIds(contacted);
-      setPendingLeadIds(pending);
-      setContactHistoryLoaded(true);
-    }).catch(() => {
-      setContactHistoryLoaded(true); // fail open — show all leads
-    });
-  }, [user?.id]);
 
   // Only show leads with verified emails
   const emailSafeLeads = useMemo(() =>
@@ -284,10 +264,6 @@ export default function CampaignBuilderPage() {
               leads={emailSafeLeads}
               selectedIds={selectedLeadIds}
               onSelectionChange={setSelectedLeadIds}
-              contactedEmails={contactedEmails}
-              enrolledLeadIds={enrolledLeadIds}
-              pendingLeadIds={pendingLeadIds}
-              contactHistoryLoaded={contactHistoryLoaded}
             />
             <div className="flex justify-end">
               <Button onClick={() => setStep(2)} disabled={!canProceedStep1} className="gap-1.5">
