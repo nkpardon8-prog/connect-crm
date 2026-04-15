@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
         }
 
         const emailData = await emailRes.json()
-        const inboundBody = emailData.text || emailData.html || ''
+        const inboundBody = emailData.html || emailData.text || ''
         const emailHeaders = emailData.headers || {}
 
         // Extract actual Message-ID header for correct email threading.
@@ -289,6 +289,59 @@ Deno.serve(async (req) => {
             description: `Received email from ${fromEmail}: "${inboundSubject}"`,
             timestamp: event.created_at,
           })
+        }
+
+        // Step 6b: Process inbound attachments
+        const inboundAttachments: Array<{filename: string; content: string | null; content_type: string}> =
+          emailData.attachments || []
+        if (inboundAttachments.length > 0 && insertedRow?.id) {
+          const MAX_FILE_BYTES = 10 * 1024 * 1024   // 10MB
+          const MAX_TOTAL_BYTES = 25 * 1024 * 1024  // 25MB
+          let totalBytes = 0
+
+          for (const att of inboundAttachments) {
+            if (!att.content) continue  // null content = skip
+            try {
+              const fileBytes = Math.ceil(att.content.length * 0.75)
+              if (fileBytes > MAX_FILE_BYTES) {
+                console.warn(`Skipping attachment ${att.filename}: exceeds 10MB`)
+                continue
+              }
+              if (totalBytes + fileBytes > MAX_TOTAL_BYTES) {
+                console.warn(`Skipping attachment ${att.filename}: total would exceed 25MB`)
+                break
+              }
+              totalBytes += fileBytes
+
+              // Chunked base64 decode — avoids spread call stack overflow on large files
+              const binaryStr = atob(att.content)
+              const bytes = new Uint8Array(binaryStr.length)
+              for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i)
+
+              const storagePath = `${insertedRow.id}/${att.filename}`
+              const { error: uploadErr } = await supabaseAdmin.storage
+                .from('email-attachments')
+                .upload(storagePath, bytes, {
+                  contentType: att.content_type || 'application/octet-stream',
+                  upsert: true,
+                })
+
+              if (uploadErr) {
+                console.error(`Failed to upload attachment ${att.filename}:`, uploadErr)
+                continue
+              }
+
+              await supabaseAdmin.from('email_attachments').insert({
+                email_id: insertedRow.id,
+                filename: att.filename,
+                content_type: att.content_type || 'application/octet-stream',
+                file_size: fileBytes,
+                storage_path: storagePath,
+              })
+            } catch (attErr) {
+              console.error(`Error processing attachment ${att.filename}:`, attErr)
+            }
+          }
         }
 
         // Reply detection: if this inbound email is a reply to a campaign email,

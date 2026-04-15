@@ -16,7 +16,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, RefreshCw, Inbox, PenLine, Layers, Clock, Mail, Megaphone, ArrowLeft, Reply, Forward, ArrowUpRight, Eye, MousePointerClick, AlertTriangle, Bold, Italic, Link2, List, Plus } from 'lucide-react';
+import { Send, RefreshCw, Inbox, PenLine, Layers, Clock, Mail, Megaphone, ArrowLeft, Reply, Forward, ArrowUpRight, Eye, MousePointerClick, AlertTriangle, Bold, Italic, Link2, List, Plus, Paperclip, Download } from 'lucide-react';
+import { uploadAttachment, getSignedUrl } from '@/lib/api/email-attachments';
+import { useEmailAttachments } from '@/hooks/use-email-attachments';
 import type { EmailMessage } from '@/types/crm';
 import CampaignList from '@/components/campaigns/CampaignList';
 
@@ -29,6 +31,68 @@ interface EmailThread {
   unreadCount: number;
   participants: string[];
   leadId?: string;
+}
+
+function MessageAttachments({ emailId }: { emailId: string }) {
+  const { data: attachments = [] } = useEmailAttachments(emailId);
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!attachments.length) return;
+    Promise.all(
+      attachments.map(att =>
+        getSignedUrl(att.storagePath)
+          .then(url => ({ id: att.id, url }))
+          .catch(() => ({ id: att.id, url: '' }))
+      )
+    ).then(results => {
+      const map: Record<string, string> = {};
+      results.forEach(r => { if (r.url) map[r.id] = r.url; });
+      setSignedUrls(map);
+    });
+  }, [attachments]);
+
+  if (!attachments.length) return null;
+
+  return (
+    <div className="mt-3 pt-3 border-t space-y-2">
+      <p className="text-xs text-muted-foreground font-medium">
+        {attachments.length} attachment{attachments.length !== 1 ? 's' : ''}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {attachments.map(att => {
+          const url = signedUrls[att.id];
+          const isImage = att.contentType.startsWith('image/');
+          return (
+            <div key={att.id} className="border rounded-md overflow-hidden">
+              {isImage && url ? (
+                <a href={url} target="_blank" rel="noopener noreferrer">
+                  <img
+                    src={url}
+                    alt={att.filename}
+                    className="max-h-[200px] max-w-[300px] object-contain block"
+                  />
+                </a>
+              ) : url ? (
+                <a
+                  href={url}
+                  download={att.filename}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-accent transition-colors"
+                >
+                  <Paperclip className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <span className="max-w-[180px] truncate">{att.filename}</span>
+                  <span className="text-muted-foreground">({(att.fileSize / 1024).toFixed(0)}KB)</span>
+                  <Download className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                </a>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function OutreachPage() {
@@ -64,6 +128,10 @@ export default function OutreachPage() {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [toEmail, setToEmail] = useState('');
+  const [composeAttachments, setComposeAttachments] = useState<Array<{
+    storagePath: string; filename: string; contentType: string; size: number;
+  }>>([]);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
 
 
   useEffect(() => {
@@ -211,6 +279,7 @@ export default function OutreachPage() {
         subject: subject.trim(),
         body: body.trim(),
         threadId: `t-${Date.now()}`,
+        attachments: composeAttachments.length > 0 ? composeAttachments : undefined,
       });
       if (toLeadId) {
         addActivity({
@@ -227,10 +296,44 @@ export default function OutreachPage() {
       setToEmail('');
       setSubject('');
       setBody('');
+      setComposeAttachments([]);
       toast.success('Email sent');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to send email');
     }
+  };
+
+  const MAX_FILE_BYTES = 10 * 1024 * 1024;
+  const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
+
+  const handleAttachFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    setAttachmentUploading(true);
+    try {
+      let runningTotal = composeAttachments.reduce((s, a) => s + a.size, 0);
+      for (const file of files) {
+        if (file.size > MAX_FILE_BYTES) {
+          toast.error(`${file.name} exceeds 10MB limit`);
+          continue;
+        }
+        if (runningTotal + file.size > MAX_TOTAL_BYTES) {
+          toast.error('Total attachment size would exceed 25MB');
+          break;
+        }
+        try {
+          const result = await uploadAttachment(file);
+          setComposeAttachments(prev => [...prev, result]);
+          runningTotal += file.size;
+        } catch {
+          toast.error(`Failed to upload ${file.name}`);
+        }
+      }
+    } finally {
+      setAttachmentUploading(false);
+    }
+    e.target.value = '';
   };
 
   const handleRefresh = () => {
@@ -428,9 +531,24 @@ export default function OutreachPage() {
                               </div>
                             </div>
                             <div className="px-4 py-3">
-                              <p className="text-sm whitespace-pre-line leading-relaxed text-foreground">
-                                {msg.body}
-                              </p>
+                              {/(<html|<!doctype)/i.test(msg.body) ? (
+                                <iframe
+                                  srcDoc={msg.body}
+                                  sandbox=""
+                                  className="w-full border-none"
+                                  style={{ minHeight: '100px' }}
+                                  onLoad={(e) => {
+                                    const el = e.currentTarget;
+                                    const h = el.contentDocument?.body?.scrollHeight;
+                                    if (h) el.style.height = `${h + 20}px`;
+                                  }}
+                                />
+                              ) : (
+                                <p className="text-sm whitespace-pre-line leading-relaxed text-foreground">
+                                  {msg.body}
+                                </p>
+                              )}
+                              <MessageAttachments emailId={msg.id} />
                             </div>
                             {msg.direction === 'outbound' && (msg.openedAt || msg.clickedAt || msg.bouncedAt) && (
                               <div className="px-4 pb-2.5 flex items-center gap-3 border-t pt-2">
@@ -837,6 +955,40 @@ export default function OutreachPage() {
                   </Button>
                 </div>
                 <Textarea placeholder="Write your email..." value={body} onChange={e => setBody(e.target.value)} className="min-h-[200px] rounded-t-none" />
+              </div>
+              {/* Attachments */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <label className={attachmentUploading ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}>
+                    <input
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={handleAttachFile}
+                      disabled={attachmentUploading}
+                    />
+                    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                      <Paperclip className="h-3.5 w-3.5" />
+                      {attachmentUploading ? 'Uploading...' : 'Attach files'}
+                    </span>
+                  </label>
+                  <span className="text-xs text-muted-foreground">10MB per file · 25MB total</span>
+                </div>
+                {composeAttachments.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {composeAttachments.map((att, i) => (
+                      <div key={i} className="flex items-center gap-1.5 bg-muted rounded-md px-2 py-1 text-xs">
+                        <Paperclip className="h-3 w-3 text-muted-foreground" />
+                        <span className="max-w-[120px] truncate">{att.filename}</span>
+                        <span className="text-muted-foreground">({(att.size / 1024).toFixed(0)}KB)</span>
+                        <button
+                          onClick={() => setComposeAttachments(prev => prev.filter((_, j) => j !== i))}
+                          className="text-muted-foreground hover:text-foreground ml-0.5"
+                        >×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <Button onClick={handleSendEmail} disabled={(!toLeadId && !toEmail) || !subject.trim() || !body.trim()} className="gap-1.5">
                 <Send className="h-4 w-4" /> Send Email

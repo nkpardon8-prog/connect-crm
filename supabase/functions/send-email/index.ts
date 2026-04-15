@@ -129,6 +129,30 @@ Deno.serve(async (req) => {
       // Generate threadId if not provided
       const threadId = email.threadId || crypto.randomUUID()
 
+      // Build Resend attachments array (single send only)
+      const resendAttachments: { filename: string; content: string }[] = []
+      if (email.attachments?.length) {
+        for (const att of email.attachments) {
+          try {
+            const { data: fileData, error: dlErr } = await supabaseAdmin.storage
+              .from('email-attachments')
+              .download(att.storagePath)
+            if (dlErr || !fileData) {
+              console.error(`Failed to download attachment ${att.filename}:`, dlErr)
+              continue
+            }
+            const buffer = await fileData.arrayBuffer()
+            const bytes = new Uint8Array(buffer)
+            // Chunked encode — avoids spread stack overflow on files > ~250KB
+            let binary = ''
+            for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+            resendAttachments.push({ filename: att.filename, content: btoa(binary) })
+          } catch (e) {
+            console.error(`Error encoding attachment ${att.filename}:`, e)
+          }
+        }
+      }
+
       const resendRes = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -142,6 +166,7 @@ Deno.serve(async (req) => {
           text: email.body,
           ...(campaignId ? { html: plainTextToHtml(email.body) } : {}),
           headers: Object.keys(threadingHeaders).length > 0 ? threadingHeaders : undefined,
+          ...(resendAttachments.length > 0 ? { attachments: resendAttachments } : {}),
         }),
       })
 
@@ -182,6 +207,18 @@ Deno.serve(async (req) => {
         await supabaseAdmin.from('leads').update({ last_contacted_at: new Date().toISOString() }).eq('id', email.leadId)
       }
       results.push(row)
+
+      if (row?.id && email.attachments?.length) {
+        await supabaseAdmin.from('email_attachments').insert(
+          email.attachments.map((att: { storagePath: string; filename: string; contentType: string; size: number }) => ({
+            email_id: row.id,
+            filename: att.filename,
+            content_type: att.contentType,
+            file_size: att.size,
+            storage_path: att.storagePath,
+          }))
+        )
+      }
 
     } else {
       // Batch send (campaigns) — chunks of 100

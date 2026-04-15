@@ -1,5 +1,12 @@
 import { supabase } from '@/lib/supabase';
 
+interface AttachmentRef {
+  storagePath: string;
+  filename: string;
+  contentType: string;
+  size: number;
+}
+
 interface SendEmailRequest {
   leadId?: string;
   from: string;
@@ -9,6 +16,7 @@ interface SendEmailRequest {
   body: string;
   threadId?: string;
   replyToId?: string;
+  attachments?: AttachmentRef[];
 }
 
 interface SendEmailResponse {
