@@ -18,6 +18,7 @@ import NotFound from "@/pages/NotFound";
 import UnsubscribePage from "@/pages/UnsubscribePage";
 import CampaignDetailPage from "@/pages/CampaignDetailPage";
 import CampaignBuilderPage from "@/pages/CampaignBuilderPage";
+import StaffPerformancePage from "@/pages/StaffPerformancePage";
 
 const queryClient = new QueryClient();
 
@@ -49,6 +50,7 @@ function AuthGate() {
         <Route path="/outreach/campaign/:id" element={<CampaignDetailPage />} />
         <Route path="/pipeline" element={<PipelinePage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/staff" element={<StaffPerformancePage />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

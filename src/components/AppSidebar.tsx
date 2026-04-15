@@ -7,6 +7,7 @@ import {
   Kanban,
   Settings,
   LogOut,
+  BarChart2,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,13 +32,12 @@ const navItems = [
   { title: 'Lead Generator', url: '/generator', icon: Sparkles },
   { title: 'Outreach', url: '/outreach', icon: Mail },
   { title: 'Pipeline', url: '/pipeline', icon: Kanban },
-  { title: 'Settings', url: '/settings', icon: Settings },
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
 
   return (
     <Sidebar collapsible="icon">
@@ -68,6 +68,32 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {isAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to="/staff"
+                      className="flex items-center gap-3 px-3 py-2 rounded-md text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+                      activeClassName="bg-sidebar-accent text-sidebar-foreground font-medium"
+                    >
+                      <BarChart2 className="h-4 w-4 flex-shrink-0" />
+                      {!collapsed && <span>Staff Performance</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <NavLink
+                    to="/settings"
+                    className="flex items-center gap-3 px-3 py-2 rounded-md text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+                    activeClassName="bg-sidebar-accent text-sidebar-foreground font-medium"
+                  >
+                    <Settings className="h-4 w-4 flex-shrink-0" />
+                    {!collapsed && <span>Settings</span>}
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
