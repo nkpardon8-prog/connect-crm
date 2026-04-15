@@ -349,7 +349,7 @@ Deno.serve(async (req) => {
         if (replyToId && insertedRow) {
           // Look up the parent outbound email's campaign_id
           const { data: parentEmail } = await supabaseAdmin.from('emails')
-            .select('campaign_id')
+            .select('campaign_id, user_id')
             .eq('id', replyToId)
             .single()
 
@@ -371,6 +371,13 @@ Deno.serve(async (req) => {
                 .update({ status: 'warm' })
                 .eq('id', matchedLead.id)
                 .neq('status', 'warm')
+
+              // Auto-assign to campaign sender if lead is currently unassigned
+              if (parentEmail?.user_id && matchedLead?.id && !matchedLead.assigned_to) {
+                await supabaseAdmin.from('leads')
+                  .update({ assigned_to: parentEmail.user_id })
+                  .eq('id', matchedLead.id)
+              }
 
               console.log(`Reply detected: lead ${matchedLead.id} flagged as warm, campaign ${parentEmail.campaign_id}`)
             }

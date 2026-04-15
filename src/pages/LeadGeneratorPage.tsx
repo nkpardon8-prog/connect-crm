@@ -28,7 +28,7 @@ interface ChatMessage {
 
 export default function LeadGeneratorPage() {
   const { addLeads } = useLeads();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: 'bot', content: 'Describe your ideal customer profile and I\'ll search Apollo.io for matching contacts with verified contact information.\n\nFor example: "CTOs at SaaS companies, 50-200 employees, based in Austin"' },
   ]);
@@ -37,6 +37,7 @@ export default function LeadGeneratorPage() {
   const [importedSets, setImportedSets] = useState<Set<number>>(new Set());
   const [selectedCount, setSelectedCount] = useState(25);
   const [requirePhone, setRequirePhone] = useState(false);
+  const [assignToSelf, setAssignToSelf] = useState(false);
   const [historyIds, setHistoryIds] = useState<Map<number, string>>(new Map());
 
   useEffect(() => {
@@ -155,7 +156,7 @@ export default function LeadGeneratorPage() {
     }
     const cleanedLeads = newLeads.map(({ id, createdAt, isDuplicate, ...rest }) => ({
       ...rest,
-      assignedTo: user!.id,
+      assignedTo: isAdmin && !assignToSelf ? null : user!.id,
     }));
     addLeads(cleanedLeads);
     setImportedSets(prev => new Set([...prev, msgIndex]));
@@ -248,7 +249,14 @@ export default function LeadGeneratorPage() {
                         ))}
                       </TableBody>
                     </Table>
-                    <div className="p-2 border-t bg-muted/30">
+                    <div className="p-2 border-t bg-muted/30 flex items-center gap-3 flex-wrap">
+                      {isAdmin && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Switch checked={assignToSelf} onCheckedChange={setAssignToSelf} />
+                          <span className="text-sm">Assign to myself</span>
+                          <span className="text-muted-foreground text-xs">(default: unassigned pool)</span>
+                        </div>
+                      )}
                       {(() => {
                         const newCount = (msg.leads || []).filter(l => !l.isDuplicate).length;
                         const totalCount = (msg.leads || []).length;

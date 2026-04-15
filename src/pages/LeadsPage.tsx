@@ -112,6 +112,11 @@ export default function LeadsPage() {
     });
     updateLead(leadId, { lastContactedAt: new Date().toISOString() });
     incrementCallCount([leadId]);
+    // Auto-assign if lead is currently unassigned
+    const calledLead = leads.find(l => l.id === leadId);
+    if (calledLead && !calledLead.assignedTo) {
+      updateLead(leadId, { assignedTo: user!.id });
+    }
     window.location.href = `tel:${phone}`;
   };
 
@@ -144,6 +149,11 @@ export default function LeadsPage() {
         timestamp: new Date().toISOString(),
       });
       updateLead(leadId, { lastContactedAt: new Date().toISOString() });
+      // Auto-assign if lead is currently unassigned
+      const markedLead = leads.find(l => l.id === leadId);
+      if (markedLead && !markedLead.assignedTo) {
+        updateLead(leadId, { assignedTo: user!.id });
+      }
       setMarkCallLeadId(null);
       setCallNotes('');
     } catch {
@@ -294,7 +304,7 @@ export default function LeadsPage() {
                 <TableHead className="text-xs">Engagement</TableHead>
                 <TableHead className="text-xs">Calls</TableHead>
                 <TableHead className="text-xs">Emails</TableHead>
-                {isAdmin && <TableHead>Assigned</TableHead>}
+                <TableHead>Assigned</TableHead>
                 <TableHead>Last Contact</TableHead>
               </TableRow>
             </TableHeader>
@@ -363,7 +373,20 @@ export default function LeadsPage() {
                     </div>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{(lead.emailCount ?? 0) >= 5 ? '5+' : lead.emailCount ?? 0}</TableCell>
-                  {isAdmin && <TableCell className="text-sm">{getRepName(lead.assignedTo)}</TableCell>}
+                  <TableCell className="text-sm" onClick={e => e.stopPropagation()}>
+                    {lead.assignedTo ? (
+                      <span className="text-muted-foreground">{getRepName(lead.assignedTo)}</span>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 text-xs px-2"
+                        onClick={() => updateLead(lead.id, { assignedTo: user!.id })}
+                      >
+                        Claim
+                      </Button>
+                    )}
+                  </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {lead.lastContactedAt ? new Date(lead.lastContactedAt).toLocaleDateString() : 'Never'}
                   </TableCell>

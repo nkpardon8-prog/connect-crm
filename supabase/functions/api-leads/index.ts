@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
         .order('created_at', { ascending: false })
         .limit(limit)
 
-      if (user.role !== 'admin') query = query.eq('assigned_to', user.id)
+      if (user.role !== 'admin') query = query.or(`assigned_to.eq.${user.id},assigned_to.is.null`)
       if (status) query = query.eq('status', status)
       if (q) query = query.or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%,company.ilike.%${q}%`)
 
@@ -75,15 +75,18 @@ Deno.serve(async (req) => {
     if (method === 'POST') {
       const body = await req.json()
       if (Array.isArray(body)) {
-        // Bulk import — always override assigned_to
-        const rows = body.map((l: Record<string, unknown>) => ({ ...l, assigned_to: user.id }))
+        // Bulk import — admin preserves assigned_to from payload; non-admin always self-assigns
+        const rows = body.map((l: Record<string, unknown>) => ({
+          ...l,
+          assigned_to: user.role === 'admin' ? (l.assigned_to ?? null) : user.id,
+        }))
         const { data, error } = await supabaseAdmin.from('leads').insert(rows).select()
         if (error) throw error
         return json(data, 201)
       }
-      // Single create
+      // Single create — admin can pass assigned_to; non-admin always self-assigns
       const { data, error } = await supabaseAdmin.from('leads')
-        .insert({ ...body, assigned_to: user.id })
+        .insert({ ...body, assigned_to: user.role === 'admin' ? (body.assigned_to ?? null) : user.id })
         .select().single()
       if (error) throw error
       return json(data, 201)

@@ -48,6 +48,8 @@ export function useLeads() {
     error,
     updateLead: (id: string, updates: Partial<Lead>) =>
       updateLeadMutation.mutate({ id, updates }),
+    updateLeadAsync: (id: string, updates: Partial<Lead>) =>
+      updateLeadMutation.mutateAsync({ id, updates }),
     addLeads: (newLeads: Omit<Lead, 'id' | 'createdAt'>[]) =>
       addLeadsMutation.mutate(newLeads),
     deleteLead: (id: string) => deleteLeadMutation.mutate(id),

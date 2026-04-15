@@ -124,6 +124,10 @@ export default function LeadDetailPage() {
     });
     updateLead(lead.id, { lastContactedAt: new Date().toISOString() });
     incrementCallCount([lead.id]);
+    // Auto-assign if lead is currently unassigned
+    if (!lead.assignedTo) {
+      updateLead(lead.id, { assignedTo: user!.id });
+    }
     window.location.href = `tel:${lead.phone}`;
   };
 

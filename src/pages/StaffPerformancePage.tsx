@@ -1,12 +1,17 @@
 import { useState, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLeads } from '@/hooks/use-leads';
 import { useActivities } from '@/hooks/use-activities';
 import { useProfiles } from '@/hooks/use-profiles';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Phone, Mail, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
+import LeadAssignmentChat from '@/components/staff/LeadAssignmentChat';
 
 type Period = 'day' | 'week' | 'month';
 
@@ -24,6 +29,8 @@ export default function StaffPerformancePage() {
   const { activities, isLoading: activitiesLoading } = useActivities();
   const { profiles, isLoading: profilesLoading } = useProfiles();
   const [period, setPeriod] = useState<Period>('week');
+  const [cleanupRunning, setCleanupRunning] = useState(false);
+  const queryClient = useQueryClient();
 
   const employeeStats = useMemo(() => {
     const periodStart = getPeriodStart(period);
@@ -80,6 +87,23 @@ export default function StaffPerformancePage() {
     })),
   [employeeStats]);
 
+  const unassignedCount = useMemo(() => leads.filter(l => !l.assignedTo).length, [leads]);
+
+  const handleRunCleanup = async () => {
+    setCleanupRunning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('cleanup-lead-assignments');
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Cleanup complete — ${data.unassigned} leads returned to unassigned pool`);
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+    } catch {
+      toast.error('Cleanup failed');
+    } finally {
+      setCleanupRunning(false);
+    }
+  };
+
   if (leadsLoading || activitiesLoading || profilesLoading) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[50vh]">
@@ -112,6 +136,35 @@ export default function StaffPerformancePage() {
           ))}
         </div>
       </div>
+
+      {/* Lead Assignment */}
+      <Card className="border shadow-sm">
+        <CardContent className="p-4">
+          <div className="flex gap-6">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-sm font-medium mb-3">Lead Assignment</h2>
+              <LeadAssignmentChat leads={leads} profiles={profiles} />
+            </div>
+            <div className="flex flex-col gap-4 w-48 shrink-0">
+              <div>
+                <p className="text-2xl font-bold">{unassignedCount}</p>
+                <p className="text-sm text-muted-foreground">Unassigned leads</p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleRunCleanup}
+                disabled={cleanupRunning}
+                className="w-full"
+              >
+                {cleanupRunning ? 'Running...' : 'Run Cleanup'}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Returns all non-warm leads to the unassigned pool. Runs automatically at 2am UTC.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-3 gap-4">
         <Card className="border shadow-sm">
