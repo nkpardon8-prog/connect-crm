@@ -15,6 +15,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { incrementCallCount, incrementEmailCount } from '@/lib/api/leads';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from 'sonner';
 import { Search, Phone, Mail, Filter, Flame } from 'lucide-react';
 
 const statusConfig: Record<LeadStatus, { label: string; className: string }> = {
@@ -37,6 +40,9 @@ export default function LeadsPage() {
   const [industryFilter, setIndustryFilter] = useState<string>('all');
   const [callCountFilter, setCallCountFilter] = useState<Set<string>>(new Set());
   const [emailCountFilter, setEmailCountFilter] = useState<Set<string>>(new Set());
+  const [markCallLeadId, setMarkCallLeadId] = useState<string | null>(null);
+  const [callNotes, setCallNotes] = useState('');
+  const [isLogging, setIsLogging] = useState(false);
 
   const industries = useMemo(() =>
     [...new Set(leads.map(l => l.industry).filter(Boolean))].sort(),
@@ -121,6 +127,30 @@ export default function LeadsPage() {
     updateLead(leadId, { lastContactedAt: new Date().toISOString() });
     incrementEmailCount([leadId]);
     window.location.href = `mailto:${email}`;
+  };
+
+  const handleMarkCall = async () => {
+    if (!markCallLeadId || isLogging) return;
+    const leadId = markCallLeadId;
+    const notes = callNotes.trim();
+    setIsLogging(true);
+    try {
+      await incrementCallCount([leadId]);
+      addActivity({
+        leadId,
+        userId: user!.id,
+        type: 'call',
+        description: notes || 'Call logged manually',
+        timestamp: new Date().toISOString(),
+      });
+      updateLead(leadId, { lastContactedAt: new Date().toISOString() });
+      setMarkCallLeadId(null);
+      setCallNotes('');
+    } catch {
+      toast.error('Failed to log call. Please try again.');
+    } finally {
+      setIsLogging(false);
+    }
   };
 
   const getRepName = (id: string) => profiles.find(p => p.id === id)?.name || 'Unassigned';
@@ -319,7 +349,19 @@ export default function LeadsPage() {
                       </Badge>
                     ) : null}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{(lead.callCount ?? 0) >= 5 ? '5+' : lead.callCount ?? 0}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">
+                        {(lead.callCount ?? 0) >= 5 ? '5+' : lead.callCount ?? 0}
+                      </span>
+                      <button
+                        onClick={e => { e.stopPropagation(); setMarkCallLeadId(lead.id); setCallNotes(''); }}
+                        className="text-xs text-primary hover:underline whitespace-nowrap"
+                      >
+                        Mark Call
+                      </button>
+                    </div>
+                  </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{(lead.emailCount ?? 0) >= 5 ? '5+' : lead.emailCount ?? 0}</TableCell>
                   {isAdmin && <TableCell className="text-sm">{getRepName(lead.assignedTo)}</TableCell>}
                   <TableCell className="text-sm text-muted-foreground">
@@ -331,6 +373,29 @@ export default function LeadsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={markCallLeadId !== null} onOpenChange={open => { if (!open) { setMarkCallLeadId(null); setCallNotes(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Log Call</DialogTitle>
+            <DialogDescription>Add notes for this call (optional).</DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Call notes..."
+            value={callNotes}
+            onChange={e => setCallNotes(e.target.value)}
+            rows={3}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setMarkCallLeadId(null); setCallNotes(''); }}>
+              Cancel
+            </Button>
+            <Button onClick={handleMarkCall} disabled={isLogging}>
+              {isLogging ? 'Logging...' : 'Log Call'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
