@@ -13,6 +13,8 @@ interface TodoColumnProps {
   todos: Todo[];
   projects: { id: string; title: string }[];
   onRemoveColumn: () => void;
+  isMobileEmbed?: boolean;
+  disableDroppable?: boolean;
 }
 
 const priorityOrder: Record<string, number> = { urgent: 0, normal: 1, low: 2 };
@@ -27,9 +29,17 @@ function sortActiveTodos(todos: Todo[]): Todo[] {
   });
 }
 
-export function TodoColumn({ profileId, profile, todos, projects, onRemoveColumn }: TodoColumnProps) {
+export function TodoColumn({
+  profileId,
+  profile,
+  todos,
+  projects,
+  onRemoveColumn,
+  isMobileEmbed,
+  disableDroppable,
+}: TodoColumnProps) {
   const [showAllCompleted, setShowAllCompleted] = useState(false);
-  const { setNodeRef, isOver } = useDroppable({ id: profileId });
+  const { setNodeRef, isOver } = useDroppable({ id: profileId, disabled: disableDroppable });
 
   const activeTodos = sortActiveTodos(todos.filter((t) => t.status === 'active'));
   const completedTodos = todos.filter((t) => t.status === 'completed');
@@ -52,25 +62,28 @@ export function TodoColumn({ profileId, profile, todos, projects, onRemoveColumn
     <div
       ref={setNodeRef}
       className={cn(
-        'relative min-h-[400px] rounded-xl border bg-card p-4 transition-colors',
-        isOver && 'ring-2 ring-primary/40 bg-primary/5',
+        'relative transition-colors',
+        !isMobileEmbed && 'min-h-[400px] rounded-xl border bg-card p-4',
+        !disableDroppable && isOver && 'ring-2 ring-primary/40 bg-primary/5',
       )}
     >
-      <div className="mb-3 flex items-center gap-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-          {initials}
+      {!isMobileEmbed && (
+        <div className="mb-3 flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+            {initials}
+          </div>
+          <span className="text-sm font-medium">{profile.name}</span>
+          <span className="ml-1 text-xs text-muted-foreground">({activeTodos.length})</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute right-2 top-2 h-6 w-6 text-muted-foreground hover:text-foreground"
+            onClick={onRemoveColumn}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
         </div>
-        <span className="text-sm font-medium">{profile.name}</span>
-        <span className="ml-1 text-xs text-muted-foreground">({activeTodos.length})</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute right-2 top-2 h-6 w-6 text-muted-foreground hover:text-foreground"
-          onClick={onRemoveColumn}
-        >
-          <X className="h-3.5 w-3.5" />
-        </Button>
-      </div>
+      )}
 
       <div className="space-y-2">
         {activeTodos.map((todo) => (
@@ -81,7 +94,7 @@ export function TodoColumn({ profileId, profile, todos, projects, onRemoveColumn
             Drop tasks here
           </p>
         )}
-        {isOver && (
+        {isOver && !disableDroppable && (
           <div className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-4 text-center text-xs text-primary">
             Drop here to assign
           </div>
@@ -110,6 +123,17 @@ export function TodoColumn({ profileId, profile, todos, projects, onRemoveColumn
             </Button>
           )}
         </div>
+      )}
+
+      {isMobileEmbed && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRemoveColumn}
+          className="mt-3 w-full text-muted-foreground hover:text-destructive"
+        >
+          Remove column
+        </Button>
       )}
     </div>
   );

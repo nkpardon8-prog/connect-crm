@@ -7,6 +7,7 @@ import {
   useSensor,
   useSensors,
   PointerSensor,
+  TouchSensor,
   type DragStartEvent,
   type DragEndEvent,
 } from '@dnd-kit/core';
@@ -21,6 +22,7 @@ import { TodoColumn } from '@/components/todo/TodoColumn';
 import { TodoCreateForm } from '@/components/todo/TodoCreateForm';
 import { ProjectCreateDialog } from '@/components/todo/ProjectCreateDialog';
 import { ProjectCard } from '@/components/todo/ProjectCard';
+import { TodoMobileAccordion } from '@/components/todo/TodoMobileAccordion';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -48,7 +50,10 @@ export default function TodoPage() {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
-    })
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 250, tolerance: 10 },
+    }),
   );
   const { todos, updateTodo, createTodo, logActivity, isLoading: todosLoading } = useTodos();
   const { projects, isLoading: projectsLoading } = useProjects();
@@ -146,16 +151,16 @@ export default function TodoPage() {
   }
 
   return (
-    <div className="p-6 space-y-4 max-w-[1400px]">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+    <div className="p-4 md:p-6 space-y-4 max-w-[1400px]">
+      {/* Header — stacks on mobile */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-3 md:gap-4">
           <h1 className="text-2xl font-semibold text-foreground">To-Do</h1>
           <div className="flex bg-muted rounded-lg p-0.5">
             <button
               onClick={() => setView('tasks')}
               className={cn(
-                'px-3 py-1.5 text-sm rounded-md transition-all',
+                'px-3 py-1.5 text-sm rounded-md transition-all max-md:min-h-[40px]',
                 view === 'tasks'
                   ? 'bg-background shadow-sm font-medium'
                   : 'text-muted-foreground hover:text-foreground'
@@ -166,7 +171,7 @@ export default function TodoPage() {
             <button
               onClick={() => setView('projects')}
               className={cn(
-                'px-3 py-1.5 text-sm rounded-md transition-all',
+                'px-3 py-1.5 text-sm rounded-md transition-all max-md:min-h-[40px]',
                 view === 'projects'
                   ? 'bg-background shadow-sm font-medium'
                   : 'text-muted-foreground hover:text-foreground'
@@ -176,7 +181,7 @@ export default function TodoPage() {
             </button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 max-md:flex-wrap">
           <TodoCreateForm
             onSubmit={handleCreateTodo}
             columns={columns}
@@ -191,6 +196,7 @@ export default function TodoPage() {
         <DndContext
           sensors={sensors}
           collisionDetection={pointerWithin}
+          autoScroll={{ threshold: { x: 0.05, y: 0.2 }, acceleration: 10 }}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
@@ -198,7 +204,7 @@ export default function TodoPage() {
           {availableProfiles.length > 0 && (
             <div className="flex items-center gap-2">
               <Select onValueChange={(profileId) => addColumn(profileId)}>
-                <SelectTrigger className="w-[200px] h-8 text-sm">
+                <SelectTrigger className="w-[200px] h-8 text-sm max-md:h-11">
                   <div className="flex items-center gap-1.5">
                     <UserPlus className="h-3.5 w-3.5" />
                     <SelectValue placeholder="Add person..." />
@@ -253,7 +259,20 @@ export default function TodoPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Mobile: accordion of persons (hidden ≥md) */}
+          <div className="md:hidden">
+            <TodoMobileAccordion
+              columns={columns}
+              profiles={profiles}
+              todos={todos}
+              projects={projects}
+              onRemoveColumn={(columnId) => removeColumn(columnId)}
+              activeDragId={activeDragId}
+            />
+          </div>
+
+          {/* Desktop: columns grid (hidden <md) */}
+          <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <AnimatePresence>
               {columns.map(col => {
                 const profile = profiles.find(p => p.id === col.profileId);
