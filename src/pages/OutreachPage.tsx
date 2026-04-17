@@ -21,6 +21,7 @@ import { uploadAttachment, getSignedUrl } from '@/lib/api/email-attachments';
 import { useEmailAttachments } from '@/hooks/use-email-attachments';
 import type { EmailMessage } from '@/types/crm';
 import CampaignList from '@/components/campaigns/CampaignList';
+import { EmailBody } from '@/components/email/EmailBody';
 
 
 interface EmailThread {
@@ -531,23 +532,7 @@ export default function OutreachPage() {
                               </div>
                             </div>
                             <div className="px-4 py-3">
-                              {/(<html|<!doctype)/i.test(msg.body) ? (
-                                <iframe
-                                  srcDoc={msg.body}
-                                  sandbox=""
-                                  className="w-full border-none"
-                                  style={{ minHeight: '100px' }}
-                                  onLoad={(e) => {
-                                    const el = e.currentTarget;
-                                    const h = el.contentDocument?.body?.scrollHeight;
-                                    if (h) el.style.height = `${h + 20}px`;
-                                  }}
-                                />
-                              ) : (
-                                <p className="text-sm whitespace-pre-line leading-relaxed text-foreground">
-                                  {msg.body}
-                                </p>
-                              )}
+                              <EmailBody body={msg.body} title={msg.subject ? `Email: ${msg.subject}` : undefined} />
                               <MessageAttachments emailId={msg.id} />
                             </div>
                             {msg.direction === 'outbound' && (msg.openedAt || msg.clickedAt || msg.bouncedAt) && (
@@ -795,9 +780,7 @@ export default function OutreachPage() {
                                 </div>
                               </div>
                               <div className="px-4 py-3">
-                                <p className="text-sm whitespace-pre-line leading-relaxed text-foreground">
-                                  {msg.body}
-                                </p>
+                                <EmailBody body={msg.body} title={msg.subject ? `Email: ${msg.subject}` : undefined} />
                               </div>
                               {msg.direction === 'outbound' && (msg.openedAt || msg.clickedAt || msg.bouncedAt) && (
                                 <div className="px-4 pb-2.5 flex items-center gap-3 border-t pt-2">
