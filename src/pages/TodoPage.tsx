@@ -16,6 +16,7 @@ import { useTodos, useTodoColumns } from '@/hooks/use-todos';
 import { useProjects } from '@/hooks/use-projects';
 import { useProfiles } from '@/hooks/use-profiles';
 import { useAuth } from '@/contexts/AuthContext';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { TodoCard } from '@/components/todo/TodoCard';
 import { TodoColumn } from '@/components/todo/TodoColumn';
@@ -46,6 +47,11 @@ function UnassignedDropZone({ children }: { children: React.ReactNode }) {
 export default function TodoPage() {
   const [view, setView] = useState<'tasks' | 'projects'>('tasks');
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const currentIsMobile = useIsMobile();
+  // Freeze isMobile during an active drag so a mid-drag rotation doesn't
+  // remount the droppable tree and break the in-progress drag.
+  const [frozenIsMobile, setFrozenIsMobile] = useState<boolean | null>(null);
+  const isMobile = frozenIsMobile ?? currentIsMobile;
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -73,6 +79,7 @@ export default function TodoPage() {
   const projectMap = new Map(projects.map(p => [p.id, p.title]));
 
   function handleDragStart(event: DragStartEvent) {
+    setFrozenIsMobile(currentIsMobile);
     setActiveDragId(event.active.id as string);
   }
 
@@ -89,19 +96,24 @@ export default function TodoPage() {
     return null;
   }
 
+  function endDrag() {
+    setActiveDragId(null);
+    setFrozenIsMobile(null);
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || !user) {
-      setActiveDragId(null);
+      endDrag();
       return;
     }
 
     const todoId = active.id as string;
     const todo = todos.find(t => t.id === todoId);
-    if (!todo) { setActiveDragId(null); return; }
+    if (!todo) { endDrag(); return; }
 
     const resolvedTarget = resolveDropTarget(over.id as string);
-    if (!resolvedTarget) { setActiveDragId(null); return; }
+    if (!resolvedTarget) { endDrag(); return; }
 
     // Drop on unassigned zone
     if (resolvedTarget === 'unassigned') {
@@ -109,7 +121,7 @@ export default function TodoPage() {
         updateTodo(todoId, { assignedTo: null });
         logActivity(todoId, user.id, 'reassigned', { from: todo.assignedTo, to: null });
       }
-      setActiveDragId(null);
+      endDrag();
       return;
     }
 
@@ -119,7 +131,7 @@ export default function TodoPage() {
       updateTodo(todoId, { assignedTo: resolvedTarget });
       logActivity(todoId, user.id, actionType, { from: todo.assignedTo, to: resolvedTarget });
     }
-    setActiveDragId(null);
+    endDrag();
   }
 
   function handleCreateTodo(todo: Partial<Todo>) {
@@ -246,21 +258,8 @@ export default function TodoPage() {
             </div>
           </UnassignedDropZone>
 
-          {/* Columns grid */}
-          {columns.length === 0 && unassignedTodos.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                <UserPlus className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <h3 className="text-sm font-medium text-foreground mb-1">No columns yet</h3>
-              <p className="text-xs text-muted-foreground max-w-[300px]">
-                Add a team member above to create their column, then create to-dos and drag them in.
-              </p>
-            </div>
-          )}
-
-          {/* Mobile: accordion of persons (hidden ≥md) */}
-          <div className="md:hidden">
+          {/* Columns: mobile accordion OR desktop grid — mounted exclusively */}
+          {isMobile ? (
             <TodoMobileAccordion
               columns={columns}
               profiles={profiles}
@@ -269,38 +268,51 @@ export default function TodoPage() {
               onRemoveColumn={(columnId) => removeColumn(columnId)}
               activeDragId={activeDragId}
             />
-          </div>
+          ) : (
+            <>
+              {columns.length === 0 && unassignedTodos.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                    <UserPlus className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-sm font-medium text-foreground mb-1">No columns yet</h3>
+                  <p className="text-xs text-muted-foreground max-w-[300px]">
+                    Add a team member above to create their column, then create to-dos and drag them in.
+                  </p>
+                </div>
+              )}
 
-          {/* Desktop: columns grid (hidden <md) */}
-          <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <AnimatePresence>
-              {columns.map(col => {
-                const profile = profiles.find(p => p.id === col.profileId);
-                if (!profile) return null;
-                const columnTodos = todos.filter(t => t.assignedTo === col.profileId);
-                const columnProjects = projects.filter(p =>
-                  columnTodos.some(t => t.projectId === p.id)
-                );
-                return (
-                  <motion.div
-                    key={col.profileId}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.3, ease: 'easeOut' }}
-                  >
-                    <TodoColumn
-                      profileId={col.profileId}
-                      profile={profile}
-                      todos={columnTodos}
-                      projects={columnProjects.map(p => ({ id: p.id, title: p.title }))}
-                      onRemoveColumn={() => removeColumn(col.id)}
-                    />
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-          </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <AnimatePresence>
+                  {columns.map(col => {
+                    const profile = profiles.find(p => p.id === col.profileId);
+                    if (!profile) return null;
+                    const columnTodos = todos.filter(t => t.assignedTo === col.profileId);
+                    const columnProjects = projects.filter(p =>
+                      columnTodos.some(t => t.projectId === p.id)
+                    );
+                    return (
+                      <motion.div
+                        key={col.profileId}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.3, ease: 'easeOut' }}
+                      >
+                        <TodoColumn
+                          profileId={col.profileId}
+                          profile={profile}
+                          todos={columnTodos}
+                          projects={columnProjects.map(p => ({ id: p.id, title: p.title }))}
+                          onRemoveColumn={() => removeColumn(col.id)}
+                        />
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+              </div>
+            </>
+          )}
 
           {/* Drag overlay */}
           <DragOverlay>

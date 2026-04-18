@@ -42,9 +42,11 @@ export function TodoCard({ todo, isDragOverlay, projectName }: TodoCardProps) {
     isDragging,
   } = useDraggable({ id: todo.id, disabled: todo.status === 'completed' });
 
-  const style = transform
-    ? { transform: `translate(${transform.x}px, ${transform.y}px)` }
-    : undefined;
+  const style: React.CSSProperties = {
+    ...(transform ? { transform: `translate(${transform.x}px, ${transform.y}px)` } : {}),
+    WebkitTouchCallout: 'none',
+    WebkitUserDrag: 'none',
+  } as React.CSSProperties;
 
   const isCompleted = todo.status === 'completed';
   const isOverdue = !isCompleted && !!todo.dueDate && isPast(new Date(todo.dueDate)) && !isToday(new Date(todo.dueDate));
@@ -82,6 +84,7 @@ export function TodoCard({ todo, isDragOverlay, projectName }: TodoCardProps) {
         animate={{ opacity: isCompleted ? 0.5 : isDragging ? 0.4 : 1, y: 0 }}
         className={cn(
           'relative cursor-grab rounded-lg border border-l-[3px] bg-card p-3 shadow-sm transition-shadow hover:shadow-md max-md:pr-8',
+          'touch-none select-none',
           priorityColors[todo.priority],
           todo.priority === 'urgent' && !isCompleted && 'bg-red-50/50',
           isOverdue && 'ring-1 ring-red-300 bg-red-50/30',
@@ -92,7 +95,7 @@ export function TodoCard({ todo, isDragOverlay, projectName }: TodoCardProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="absolute right-1 top-1 h-6 w-6 max-md:h-11 max-md:w-11 max-md:right-0 max-md:top-0 max-md:p-[10px] max-md:min-h-0"
+          className="absolute right-1 top-1 h-6 w-6 max-md:h-11 max-md:w-11 max-md:right-0 max-md:top-0 max-md:p-[10px] max-md:min-h-0 touch-none select-none"
           onClick={handleTogglePin}
         >
           <Pin
@@ -134,7 +137,7 @@ export function TodoCard({ todo, isDragOverlay, projectName }: TodoCardProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 hover:text-green-600 max-md:h-11 max-md:w-11 max-md:p-[10px] max-md:min-h-0"
+            className="h-6 w-6 hover:text-green-600 max-md:h-11 max-md:w-11 max-md:p-[10px] max-md:min-h-0 touch-none select-none"
             onClick={handleComplete}
           >
             <CheckCircle2 className={cn('h-4 w-4', isCompleted && 'text-green-600')} />
