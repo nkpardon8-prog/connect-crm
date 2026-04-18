@@ -36,7 +36,7 @@ export default function AppLayout() {
             </div>
           </header>
           <AlertBanner />
-          <main className="flex-1 overflow-auto overscroll-y-contain">
+          <main className="flex-1 overflow-auto">
             <Outlet />
           </main>
         </div>
