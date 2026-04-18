@@ -26,6 +26,17 @@ export function EmailBody({ body, title }: EmailBodyProps) {
     const handleLoad = () => {
       const doc = iframe.contentDocument;
       if (!doc?.body) return;
+      if (!doc.getElementById('__email-body-reset')) {
+        const style = doc.createElement('style');
+        style.id = '__email-body-reset';
+        style.textContent = `
+          html, body { margin: 0; padding: 0; overflow-wrap: anywhere; word-wrap: break-word; }
+          img, video, iframe, table { max-width: 100% !important; height: auto; }
+          pre, code { white-space: pre-wrap; overflow-wrap: anywhere; }
+          a { overflow-wrap: anywhere; word-break: break-all; }
+        `;
+        (doc.head ?? doc.documentElement).appendChild(style);
+      }
       syncHeight();
       ro?.disconnect();
       ro = new ResizeObserver(syncHeight);
@@ -61,7 +72,7 @@ export function EmailBody({ body, title }: EmailBodyProps) {
   }
 
   return (
-    <p className="text-sm whitespace-pre-line leading-relaxed text-foreground">
+    <p className="text-sm whitespace-pre-line leading-relaxed text-foreground [overflow-wrap:anywhere]">
       {body}
     </p>
   );
