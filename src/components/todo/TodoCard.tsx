@@ -144,10 +144,10 @@ export function TodoCard({ todo, isDragOverlay, projectName }: TodoCardProps) {
             size="icon"
             aria-label="Delete task"
             disabled={isDragging}
-            className="h-6 w-6 text-destructive hover:bg-destructive/10 hover:text-destructive max-md:h-11 max-md:w-11 max-md:p-[10px] max-md:min-h-0"
+            className="h-6 w-6 min-h-0 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
             onClick={handleDelete}
           >
-            <Trash2 className="h-3.5 w-3.5 max-md:h-4 max-md:w-4" />
+            <Trash2 className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
