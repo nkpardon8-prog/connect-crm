@@ -307,7 +307,10 @@ export function TodoDetailSheet({ todo, open, onOpenChange, projectName }: TodoD
 
         <Button
           variant="ghost"
-          onClick={() => deleteTodoWithUndo(todo)}
+          onClick={() => {
+            onOpenChange(false);
+            deleteTodoWithUndo(todo);
+          }}
           className="w-full justify-center gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
         >
           <Trash2 className="h-4 w-4" />

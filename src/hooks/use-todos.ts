@@ -75,6 +75,17 @@ export function useTodos() {
 
     const timerId = window.setTimeout(() => {
       pendingDeletes.delete(todo.id);
+      // Log before the delete. With ON DELETE CASCADE on todo_activity.todo_id,
+      // this row may be cascade-deleted; it's logged anyway so the activity
+      // exists briefly and survives if the schema is ever changed to SET NULL.
+      if (user) {
+        logActivityMutation.mutate({
+          todoId: todo.id,
+          actorId: user.id,
+          actionType: 'deleted',
+          details: { title: todo.title },
+        });
+      }
       deleteTodoMutation.mutate(todo.id);
     }, 5000);
     pendingDeletes.set(todo.id, timerId);
