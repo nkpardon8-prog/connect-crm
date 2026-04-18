@@ -185,7 +185,8 @@ export type TodoActionType =
   | 'pinned'
   | 'unpinned'
   | 'priority_changed'
-  | 'edited';
+  | 'edited'
+  | 'deleted';
 
 export interface Todo {
   id: string;

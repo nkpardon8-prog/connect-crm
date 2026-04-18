@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { format, formatDistanceToNow } from 'date-fns';
-import { Sparkles, RefreshCw } from 'lucide-react';
+import { Sparkles, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -40,10 +40,11 @@ const actionLabels: Record<string, string> = {
   unpinned: 'unpinned this to-do',
   priority_changed: 'changed the priority',
   edited: 'edited this to-do',
+  deleted: 'deleted this to-do',
 };
 
 export function TodoDetailSheet({ todo, open, onOpenChange, projectName }: TodoDetailSheetProps) {
-  const { updateTodo, logActivity } = useTodos();
+  const { updateTodo, logActivity, deleteTodoWithUndo } = useTodos();
   const { comments, addComment } = useTodoComments(todo.id);
   const { activity } = useTodoActivity(todo.id);
   const { user } = useAuth();
@@ -301,6 +302,17 @@ export function TodoDetailSheet({ todo, open, onOpenChange, projectName }: TodoD
             Add
           </Button>
         </div>
+
+        <Separator className="my-6" />
+
+        <Button
+          variant="ghost"
+          onClick={() => deleteTodoWithUndo(todo)}
+          className="w-full justify-center gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+        >
+          <Trash2 className="h-4 w-4" />
+          Delete task
+        </Button>
       </SheetContent>
     </Sheet>
   );

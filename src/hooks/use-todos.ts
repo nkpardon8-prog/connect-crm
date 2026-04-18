@@ -1,9 +1,14 @@
 import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import * as api from '@/lib/api/todos';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Todo, TodoComment, TodoActivityEntry, TodoColumn, TodoActionType } from '@/types/crm';
+
+// Module-level singleton so pending deletes survive TodoCard remounts triggered by
+// realtime cache invalidation. Maps todoId -> browser timer id.
+const pendingDeletes = new Map<string, number>();
 
 export function useTodos() {
   const queryClient = useQueryClient();
@@ -18,6 +23,9 @@ export function useTodos() {
     const channel = supabase
       .channel('todos-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'todos' }, () => {
+        // Skip invalidation while any delete is in its undo window — otherwise a
+        // concurrent unrelated write would wipe the optimistic hide.
+        if (pendingDeletes.size > 0) return;
         queryClient.invalidateQueries({ queryKey: ['todos'] });
       })
       .subscribe();
@@ -54,6 +62,43 @@ export function useTodos() {
     }) => api.logTodoActivity(todoId, actorId, actionType, details),
   });
 
+  function deleteTodoWithUndo(todo: Todo) {
+    // If the same todo is already pending, cancel the prior timer — this click
+    // effectively restarts the 5s window (defensive; shouldn't happen in UI).
+    const existing = pendingDeletes.get(todo.id);
+    if (existing !== undefined) window.clearTimeout(existing);
+
+    // Optimistic hide — all useTodos consumers see the row vanish instantly.
+    queryClient.setQueryData<Todo[]>(['todos'], (curr = []) =>
+      curr.filter((t) => t.id !== todo.id),
+    );
+
+    const timerId = window.setTimeout(() => {
+      pendingDeletes.delete(todo.id);
+      deleteTodoMutation.mutate(todo.id);
+    }, 5000);
+    pendingDeletes.set(todo.id, timerId);
+
+    toast(`Deleted "${todo.title}"`, {
+      duration: 5000,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          const id = pendingDeletes.get(todo.id);
+          if (id === undefined) return;
+          window.clearTimeout(id);
+          pendingDeletes.delete(todo.id);
+          // Re-add the todo to the cache (rather than restoring a full snapshot)
+          // so concurrent edits to other todos during the window aren't clobbered.
+          queryClient.setQueryData<Todo[]>(['todos'], (curr = []) => {
+            if (curr.some((t) => t.id === todo.id)) return curr;
+            return [...curr, todo];
+          });
+        },
+      },
+    });
+  }
+
   function createRecurringTodo(completedTodo: Todo) {
     if (!completedTodo.recurrencePattern) return;
     const nextDueDate = api.calculateNextDueDate(completedTodo.dueDate, completedTodo.recurrencePattern);
@@ -85,7 +130,7 @@ export function useTodos() {
       batchCreateTodosMutation.mutateAsync(todos),
     updateTodo: (id: string, updates: Partial<Todo>) =>
       updateTodoMutation.mutate({ id, updates }),
-    deleteTodo: (id: string) => deleteTodoMutation.mutate(id),
+    deleteTodoWithUndo,
     logActivity: (todoId: string, actorId: string, actionType: TodoActionType, details?: Record<string, unknown>) =>
       logActivityMutation.mutate({ todoId, actorId, actionType, details }),
     createRecurringTodo,

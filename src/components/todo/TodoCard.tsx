@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { motion } from 'framer-motion';
 import { format, isPast, isToday } from 'date-fns';
-import { CheckCircle2, Pin } from 'lucide-react';
+import { CheckCircle2, Pin, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -31,7 +31,7 @@ const priorityDotColors: Record<string, string> = {
 
 export function TodoCard({ todo, isDragOverlay, projectName }: TodoCardProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const { updateTodo, logActivity, createRecurringTodo } = useTodos();
+  const { updateTodo, logActivity, createRecurringTodo, deleteTodoWithUndo } = useTodos();
   const { user } = useAuth();
 
   const {
@@ -58,6 +58,11 @@ export function TodoCard({ todo, isDragOverlay, projectName }: TodoCardProps) {
     if (user) {
       logActivity(todo.id, user.id, newPinned ? 'pinned' : 'unpinned');
     }
+  }
+
+  function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    deleteTodoWithUndo(todo);
   }
 
   function handleComplete(e: React.MouseEvent) {
@@ -133,7 +138,17 @@ export function TodoCard({ todo, isDragOverlay, projectName }: TodoCardProps) {
           )}
         </div>
 
-        <div className="mt-2 flex justify-end">
+        <div className="mt-2 flex items-center justify-between">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Delete task"
+            disabled={isDragging}
+            className="h-6 w-6 text-destructive hover:bg-destructive/10 hover:text-destructive max-md:h-11 max-md:w-11 max-md:p-[10px] max-md:min-h-0"
+            onClick={handleDelete}
+          >
+            <Trash2 className="h-3.5 w-3.5 max-md:h-4 max-md:w-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
