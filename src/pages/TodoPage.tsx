@@ -208,7 +208,7 @@ export default function TodoPage() {
         <DndContext
           sensors={sensors}
           collisionDetection={pointerWithin}
-          autoScroll={{ threshold: { x: 0.05, y: 0.2 }, acceleration: 10 }}
+          autoScroll={false}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
