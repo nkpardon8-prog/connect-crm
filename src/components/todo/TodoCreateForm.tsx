@@ -10,7 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProjects } from '@/hooks/use-projects';
 import type { Todo, TodoPriority, RecurrencePattern, TodoColumn, User } from '@/types/crm';
+
+const NEW_PROJECT = '__new__';
+const NO_PROJECT = '__none__';
 
 interface TodoCreateFormProps {
   onSubmit: (todo: Partial<Todo>) => void;
@@ -26,6 +30,8 @@ const emptyForm = {
   dueDate: '',
   isRecurring: false,
   recurrencePattern: null as RecurrencePattern | null,
+  projectSelection: NO_PROJECT as string, // project id, NO_PROJECT, or NEW_PROJECT
+  newProjectTitle: '',
 };
 
 export function TodoCreateForm({ onSubmit, columns, profiles }: TodoCreateFormProps) {
@@ -33,6 +39,8 @@ export function TodoCreateForm({ onSubmit, columns, profiles }: TodoCreateFormPr
   const [form, setForm] = useState({ ...emptyForm });
   const [enhancing, setEnhancing] = useState<string | null>(null);
   const { user } = useAuth();
+  const { projects, createProject } = useProjects();
+  const activeProjects = projects.filter((p) => p.status === 'active');
 
   function reset() {
     setForm({ ...emptyForm });
@@ -59,7 +67,7 @@ export function TodoCreateForm({ onSubmit, columns, profiles }: TodoCreateFormPr
     }
   }
 
-  function buildTodo(assignedTo: string | null): Partial<Todo> {
+  function buildTodo(assignedTo: string | null, projectId: string | null): Partial<Todo> {
     return {
       title: form.title,
       summary: form.summary || null,
@@ -69,7 +77,7 @@ export function TodoCreateForm({ onSubmit, columns, profiles }: TodoCreateFormPr
       status: 'active',
       assignedTo,
       createdBy: user?.id || '',
-      projectId: null,
+      projectId,
       isPinned: false,
       isRecurring: form.isRecurring,
       recurrencePattern: form.isRecurring ? form.recurrencePattern : null,
@@ -78,24 +86,56 @@ export function TodoCreateForm({ onSubmit, columns, profiles }: TodoCreateFormPr
     };
   }
 
-  function handleDone() {
+  async function resolveProjectId(): Promise<string | null> {
+    if (form.projectSelection === NO_PROJECT) return null;
+    if (form.projectSelection === NEW_PROJECT) {
+      const title = form.newProjectTitle.trim();
+      if (!title) {
+        toast.error('Enter a name for the new project');
+        return null;
+      }
+      if (!user) return null;
+      const p = await createProject({
+        title,
+        goal: null,
+        outcomes: null,
+        notes: null,
+        status: 'active',
+        createdBy: user.id,
+      });
+      return p.id;
+    }
+    return form.projectSelection;
+  }
+
+  async function handleDone() {
     if (!form.title) {
       toast.error('Title is required');
       return;
     }
-    onSubmit(buildTodo(null));
+    if (form.projectSelection === NEW_PROJECT && !form.newProjectTitle.trim()) {
+      toast.error('Enter a name for the new project');
+      return;
+    }
+    const projectId = await resolveProjectId();
+    onSubmit(buildTodo(null, projectId));
     reset();
     setOpen(false);
   }
 
-  function handleApplyToAll() {
+  async function handleApplyToAll() {
     if (!form.title) {
       toast.error('Title is required');
       return;
     }
+    if (form.projectSelection === NEW_PROJECT && !form.newProjectTitle.trim()) {
+      toast.error('Enter a name for the new project');
+      return;
+    }
+    const projectId = await resolveProjectId();
     const columnProfileIds = columns.map((c) => c.profileId);
     for (const profileId of columnProfileIds) {
-      onSubmit(buildTodo(profileId));
+      onSubmit(buildTodo(profileId, projectId));
     }
     reset();
     setOpen(false);
@@ -166,6 +206,33 @@ export function TodoCreateForm({ onSubmit, columns, profiles }: TodoCreateFormPr
               value={form.details}
               onChange={(e) => setForm((f) => ({ ...f, details: e.target.value }))}
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Project</Label>
+            <Select
+              value={form.projectSelection}
+              onValueChange={(v) => setForm((f) => ({ ...f, projectSelection: v, newProjectTitle: v === NEW_PROJECT ? f.newProjectTitle : '' }))}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_PROJECT}>No project</SelectItem>
+                {activeProjects.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                ))}
+                <SelectItem value={NEW_PROJECT}>+ Create new project…</SelectItem>
+              </SelectContent>
+            </Select>
+            {form.projectSelection === NEW_PROJECT && (
+              <Input
+                autoFocus
+                placeholder="New project name"
+                value={form.newProjectTitle}
+                onChange={(e) => setForm((f) => ({ ...f, newProjectTitle: e.target.value }))}
+              />
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">

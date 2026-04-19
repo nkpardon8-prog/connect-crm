@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useLeads } from '@/hooks/use-leads';
 import { useActivities } from '@/hooks/use-activities';
 import { useDeals } from '@/hooks/use-deals';
@@ -6,7 +7,8 @@ import { useProfiles } from '@/hooks/use-profiles';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Users, Phone, Mail, TrendingUp, DollarSign } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Users, Phone, Mail, TrendingUp, DollarSign, ListTodo } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts';
 import EngagementLeaderboard from '@/components/campaigns/EngagementLeaderboard';
 import { TodoDashboardWidgets } from '@/components/todo/TodoDashboardWidgets';
@@ -24,6 +26,7 @@ export default function DashboardPage() {
   const { deals, isLoading: dealsLoading } = useDeals();
   const { profiles } = useProfiles();
   const { user, isAdmin } = useAuth();
+  const navigate = useNavigate();
 
   const totalLeads = leads.length;
   const callsMade = activities.filter(a => a.type === 'call').length;
@@ -95,13 +98,23 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-[1400px]">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground leading-tight">
-          {isAdmin ? 'Team Dashboard' : `Welcome back, ${user?.name.split(' ')[0]}`}
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          {isAdmin ? 'Overview of all team activity' : 'Your personal performance overview'}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight">
+            {isAdmin ? 'Team Dashboard' : `Welcome back, ${user?.name.split(' ')[0]}`}
+          </h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            {isAdmin ? 'Overview of all team activity' : 'Your personal performance overview'}
+          </p>
+        </div>
+        <Button
+          onClick={() => navigate('/todos')}
+          className="hidden md:inline-flex gap-2"
+          aria-label="Open To-Do page"
+        >
+          <ListTodo className="h-4 w-4" />
+          To-Do
+        </Button>
       </div>
 
       {/* To-Do widgets */}

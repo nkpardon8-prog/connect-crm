@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Check, Copy, Trash2, BarChart3, List, Circle } from 'lucide-react';
+import { Check, Copy, Trash2, BarChart3, List, Circle, Plus } from 'lucide-react';
 import { format, parseISO, addDays } from 'date-fns';
 import { toast } from 'sonner';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -14,6 +14,7 @@ import { useProjects } from '@/hooks/use-projects';
 import { useTodos } from '@/hooks/use-todos';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProjectTimeline } from './ProjectTimeline';
+import { AddTaskToProjectDialog } from './AddTaskToProjectDialog';
 import type { Project, Todo, User } from '@/types/crm';
 
 interface Props {
@@ -175,7 +176,7 @@ export function ProjectDetailSheet({ project, todos, profiles, open, onOpenChang
             <Progress value={progress} className="h-2" />
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex items-center justify-between gap-2">
             <Button
               variant={showTimeline ? 'default' : 'outline'}
               size="sm"
@@ -184,6 +185,17 @@ export function ProjectDetailSheet({ project, todos, profiles, open, onOpenChang
               {showTimeline ? <List className="mr-1 h-4 w-4" /> : <BarChart3 className="mr-1 h-4 w-4" />}
               {showTimeline ? 'Tasks' : 'Timeline'}
             </Button>
+            <AddTaskToProjectDialog
+              projectId={project.id}
+              projectTitle={project.title}
+              profiles={profiles}
+              trigger={
+                <Button variant="outline" size="sm">
+                  <Plus className="mr-1 h-4 w-4" />
+                  Add task
+                </Button>
+              }
+            />
           </div>
 
           {showTimeline ? (
@@ -215,9 +227,11 @@ export function ProjectDetailSheet({ project, todos, profiles, open, onOpenChang
                     {assignee && (
                       <span className="shrink-0 text-xs text-muted-foreground">{assignee.name}</span>
                     )}
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {format(parseISO(todo.dueDate), 'MMM d')}
-                    </span>
+                    {todo.dueDate && (
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {format(parseISO(todo.dueDate), 'MMM d')}
+                      </span>
+                    )}
                   </div>
                 );
               })}
