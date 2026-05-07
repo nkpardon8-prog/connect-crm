@@ -14,16 +14,16 @@ export type LeadStatus = 'cold' | 'lukewarm' | 'warm' | 'dead';
 export interface Lead {
   id: string;
   firstName: string;
-  lastName: string;
+  lastName?: string;
   email: string;
   phone: string;
-  jobTitle: string;
-  company: string;
-  companySize: string;
+  jobTitle?: string;
+  company?: string;
+  companySize?: string;
   industry: string;
   location: string;
   status: LeadStatus;
-  assignedTo: string; // user id
+  assignedTo: string | null; // user id
   createdAt: string;
   lastContactedAt: string | null;
   notes: string;

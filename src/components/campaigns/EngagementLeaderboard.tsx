@@ -26,8 +26,8 @@ export default function EngagementLeaderboard() {
             <div key={entry.leadId} className="flex items-center gap-3 p-2 rounded-lg bg-muted/50">
               <span className="text-sm font-bold text-muted-foreground w-5">{i + 1}</span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{lead.firstName} {lead.lastName}</p>
-                <p className="text-xs text-muted-foreground truncate">{lead.company}</p>
+                <p className="text-sm font-medium truncate">{lead.firstName} {lead.lastName ?? ''}</p>
+                <p className="text-xs text-muted-foreground truncate">{lead.company ?? ''}</p>
               </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 {entry.opens > 0 && <span className="flex items-center gap-0.5"><Eye className="h-3 w-3" />{entry.opens}</span>}

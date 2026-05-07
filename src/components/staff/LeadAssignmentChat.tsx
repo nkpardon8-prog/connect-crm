@@ -48,7 +48,7 @@ export default function LeadAssignmentChat({ leads, profiles }: LeadAssignmentCh
       // Strip PII, cap at 500 most recent
       const leadSummaries = leads.slice(0, 500).map(l => ({
         id: l.id,
-        name: `${l.firstName} ${l.lastName}`.trim(),
+        name: `${l.firstName} ${l.lastName ?? ''}`.trim(),
         company: l.company ?? '',
         status: l.status,
         industry: l.industry ?? '',

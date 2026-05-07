@@ -344,7 +344,7 @@ export default function CampaignBuilderPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {sampleLead && (
-              <p className="text-xs text-muted-foreground">Previewing with: {sampleLead.firstName} {sampleLead.lastName} at {sampleLead.company}</p>
+              <p className="text-xs text-muted-foreground">Previewing with: {sampleLead.firstName} {sampleLead.lastName ?? ''} at {sampleLead.company ?? ''}</p>
             )}
             <Card className="border bg-muted/20">
               <CardContent className="p-4 space-y-3">

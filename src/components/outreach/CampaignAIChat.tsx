@@ -56,11 +56,11 @@ export default function CampaignAIChat({ leads, industries, onApplyResult }: Cam
       const leadSummaries = leads.map(l => ({
         id: l.id,
         firstName: l.firstName,
-        lastName: l.lastName,
-        company: l.company,
+        lastName: l.lastName ?? '',
+        company: l.company ?? '',
         industry: l.industry,
         status: l.status,
-        jobTitle: l.jobTitle,
+        jobTitle: l.jobTitle ?? '',
         location: l.location,
       }));
 

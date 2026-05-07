@@ -51,7 +51,7 @@ export default function PipelinePage() {
 
   const getLeadName = (leadId: string) => {
     const lead = leads.find(l => l.id === leadId);
-    return lead ? `${lead.firstName} ${lead.lastName}` : 'Unknown';
+    return lead ? `${lead.firstName} ${lead.lastName ?? ''}`.trim() : 'Unknown';
   };
 
   const handleCreateDeal = async () => {
@@ -84,8 +84,8 @@ export default function PipelinePage() {
     const q = dealSearch.toLowerCase();
     return (
       l.firstName.toLowerCase().includes(q) ||
-      l.lastName.toLowerCase().includes(q) ||
-      l.company.toLowerCase().includes(q)
+      (l.lastName?.toLowerCase().includes(q) ?? false) ||
+      (l.company?.toLowerCase().includes(q) ?? false)
     );
   });
 
@@ -163,7 +163,7 @@ export default function PipelinePage() {
               <div className="relative">
                 <Input
                   placeholder="Search for a lead..."
-                  value={dealLeadId ? `${leads.find(l => l.id === dealLeadId)?.firstName} ${leads.find(l => l.id === dealLeadId)?.lastName}` : dealSearch}
+                  value={dealLeadId ? `${leads.find(l => l.id === dealLeadId)?.firstName ?? ''} ${leads.find(l => l.id === dealLeadId)?.lastName ?? ''}`.trim() : dealSearch}
                   onChange={e => { setDealSearch(e.target.value); setDealLeadId(''); }}
                   onFocus={() => { if (dealLeadId) { setDealSearch(''); setDealLeadId(''); } }}
                 />
@@ -174,8 +174,8 @@ export default function PipelinePage() {
                     ) : (
                       filteredDealLeads.slice(0, 10).map(l => (
                         <div key={l.id} className="px-3 py-2 text-sm cursor-pointer hover:bg-accent transition-colors" onClick={() => { setDealLeadId(l.id); setDealSearch(''); }}>
-                          <span className="font-medium">{l.firstName} {l.lastName}</span>
-                          <span className="text-muted-foreground"> — {l.company}</span>
+                          <span className="font-medium">{l.firstName} {l.lastName ?? ''}</span>
+                          <span className="text-muted-foreground"> — {l.company ?? ''}</span>
                         </div>
                       ))
                     )}

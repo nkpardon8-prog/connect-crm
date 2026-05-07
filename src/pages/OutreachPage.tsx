@@ -199,9 +199,9 @@ export default function OutreachPage() {
     const q = toSearch.toLowerCase();
     return emailSafeLeads.filter(l =>
       l.firstName.toLowerCase().includes(q) ||
-      l.lastName.toLowerCase().includes(q) ||
+      (l.lastName?.toLowerCase().includes(q) ?? false) ||
       l.email.toLowerCase().includes(q) ||
-      l.company.toLowerCase().includes(q)
+      (l.company?.toLowerCase().includes(q) ?? false)
     ).slice(0, 10);
   }, [emailSafeLeads, toSearch]);
 
@@ -344,7 +344,7 @@ export default function OutreachPage() {
 
   const getContactName = (email: string) => {
     const lead = leads.find(l => l.email === email);
-    if (lead) return `${lead.firstName} ${lead.lastName}`;
+    if (lead) return `${lead.firstName} ${lead.lastName ?? ''}`.trim();
     const usr = profiles.find(u => u.email === email);
     if (usr) return usr.name;
     return email.split('@')[0];
@@ -883,7 +883,7 @@ export default function OutreachPage() {
                 <div className="relative">
                   <Input
                     placeholder="Search leads or type an email address..."
-                    value={toLeadId ? `${leads.find(l => l.id === toLeadId)?.firstName} ${leads.find(l => l.id === toLeadId)?.lastName} — ${leads.find(l => l.id === toLeadId)?.email}` : (toEmail && !toSearch) ? toEmail : toSearch}
+                    value={toLeadId ? `${leads.find(l => l.id === toLeadId)?.firstName ?? ''} ${leads.find(l => l.id === toLeadId)?.lastName ?? ''} — ${leads.find(l => l.id === toLeadId)?.email}` : (toEmail && !toSearch) ? toEmail : toSearch}
                     onChange={e => { setToSearch(e.target.value); setToLeadId(''); setToEmail(''); if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.target.value.trim())) { setToEmail(e.target.value.trim()); } }}
                     onFocus={() => { if (toLeadId || toEmail) { setToSearch(''); setToLeadId(''); setToEmail(''); } }}
                   />
@@ -905,9 +905,9 @@ export default function OutreachPage() {
                           className="px-3 py-2 text-sm cursor-pointer hover:bg-accent transition-colors"
                           onClick={() => { setToLeadId(l.id); setToSearch(''); }}
                         >
-                          <span className="font-medium text-foreground">{l.firstName} {l.lastName}</span>
+                          <span className="font-medium text-foreground">{l.firstName} {l.lastName ?? ''}</span>
                           <span className="text-muted-foreground"> — {l.email}</span>
-                          <span className="text-muted-foreground text-xs ml-1">({l.company})</span>
+                          <span className="text-muted-foreground text-xs ml-1">({l.company ?? ''})</span>
                         </div>
                       ))}
                       {filteredComposeLeads.length === 0 && !toEmail && (

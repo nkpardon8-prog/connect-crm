@@ -2,10 +2,12 @@ import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '@/lib/api/leads';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 import type { Lead } from '@/types/crm';
 
 export function useLeads() {
   const queryClient = useQueryClient();
+  const { user, isAdmin } = useAuth();
 
   const { data: leads = [], isLoading, error } = useQuery({
     queryKey: ['leads'],
@@ -31,8 +33,9 @@ export function useLeads() {
 
   const addLeadsMutation = useMutation({
     mutationFn: async (newLeads: Omit<Lead, 'id' | 'createdAt'>[]) => {
+      if (!user) throw new Error('Not authenticated')
       await api.mergePhoneReveals(newLeads)
-      return api.createLeads(newLeads)
+      return api.createLeads(newLeads, { currentUserId: user.id, isAdmin })
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leads'] }),
   });
@@ -52,6 +55,8 @@ export function useLeads() {
       updateLeadMutation.mutateAsync({ id, updates }),
     addLeads: (newLeads: Omit<Lead, 'id' | 'createdAt'>[]) =>
       addLeadsMutation.mutate(newLeads),
+    addLeadsAsync: (newLeads: Omit<Lead, 'id' | 'createdAt'>[]) =>
+      addLeadsMutation.mutateAsync(newLeads),
     deleteLead: (id: string) => deleteLeadMutation.mutate(id),
   };
 }

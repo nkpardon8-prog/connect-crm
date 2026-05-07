@@ -61,8 +61,8 @@ export default function AudienceSelector({
       if (emailCountFilter.size > 0 && !matchesCountFilter(l.emailCount ?? 0, emailCountFilter)) return false;
       if (search) {
         const q = search.toLowerCase();
-        return l.firstName.toLowerCase().includes(q) || l.lastName.toLowerCase().includes(q)
-          || l.company.toLowerCase().includes(q) || l.email.toLowerCase().includes(q);
+        return l.firstName.toLowerCase().includes(q) || (l.lastName?.toLowerCase().includes(q) ?? false)
+          || (l.company?.toLowerCase().includes(q) ?? false) || l.email.toLowerCase().includes(q);
       }
       return true;
     });
@@ -191,8 +191,8 @@ export default function AudienceSelector({
             {filtered.slice(0, 100).map(l => (
               <TableRow key={l.id} className="cursor-pointer" onClick={() => toggleOne(l.id)}>
                 <TableCell><Checkbox checked={selectedIds.has(l.id)} /></TableCell>
-                <TableCell className="text-xs font-medium">{l.firstName} {l.lastName}</TableCell>
-                <TableCell className="text-xs">{l.company}</TableCell>
+                <TableCell className="text-xs font-medium">{l.firstName} {l.lastName ?? ''}</TableCell>
+                <TableCell className="text-xs">{l.company ?? ''}</TableCell>
                 <TableCell className="text-xs">{l.industry}</TableCell>
                 <TableCell><Badge variant="secondary" className="text-[10px] capitalize">{l.status}</Badge></TableCell>
                 <TableCell className="text-xs text-muted-foreground">{(l.callCount ?? 0) >= 5 ? '5+' : l.callCount ?? 0}</TableCell>

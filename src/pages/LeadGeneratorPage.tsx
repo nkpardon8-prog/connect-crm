@@ -218,9 +218,9 @@ export default function LeadGeneratorPage() {
                       <TableBody>
                         {msg.leads.map(l => (
                           <TableRow key={l.id}>
-                            <TableCell className="text-xs font-medium">{l.firstName} {l.lastName}</TableCell>
-                            <TableCell className="text-xs">{l.jobTitle}</TableCell>
-                            <TableCell className="text-xs">{l.company}</TableCell>
+                            <TableCell className="text-xs font-medium">{l.firstName} {l.lastName ?? ''}</TableCell>
+                            <TableCell className="text-xs">{l.jobTitle ?? ''}</TableCell>
+                            <TableCell className="text-xs">{l.company ?? ''}</TableCell>
                             <TableCell className="text-xs truncate max-w-[150px]">
                               {l.email ? (
                                 <span className="flex items-center gap-1"><Mail className="h-3 w-3 text-muted-foreground" />{l.email}</span>

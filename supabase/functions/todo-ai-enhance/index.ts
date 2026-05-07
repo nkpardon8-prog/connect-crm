@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
         'X-Title': 'IntegrateAPI CRM',
       },
       body: JSON.stringify({
-        model: 'inception/mercury-coder-small-beta',
+        model: 'inception/mercury-2',
         messages: [
           {
             role: 'system',

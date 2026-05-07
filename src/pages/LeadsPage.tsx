@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { Search, Phone, Mail, Filter, Flame } from 'lucide-react';
+import { AddLeadDialog } from '@/components/leads/add-lead/AddLeadDialog';
 
 const statusConfig: Record<LeadStatus, { label: string; className: string }> = {
   cold: { label: 'Cold', className: 'bg-blue-100 text-blue-700 border-blue-200' },
@@ -75,8 +76,8 @@ export default function LeadsPage() {
     if (search) {
       const q = search.toLowerCase();
       filtered = filtered.filter(l =>
-        `${l.firstName} ${l.lastName}`.toLowerCase().includes(q) ||
-        l.company.toLowerCase().includes(q) ||
+        `${l.firstName} ${l.lastName ?? ''}`.toLowerCase().includes(q) ||
+        (l.company?.toLowerCase().includes(q) ?? false) ||
         l.email.toLowerCase().includes(q)
       );
     }
@@ -284,6 +285,9 @@ export default function LeadsPage() {
             <Button size="sm" variant="outline" onClick={() => bulkUpdateStatus('dead')}>Mark Dead</Button>
           </div>
         )}
+        <div className="ml-auto">
+          <AddLeadDialog />
+        </div>
       </div>
 
       {/* Table */}
@@ -314,15 +318,15 @@ export default function LeadsPage() {
                   <TableCell onClick={e => e.stopPropagation()}>
                     <Checkbox checked={selected.has(lead.id)} onCheckedChange={() => toggleSelect(lead.id)} />
                   </TableCell>
-                  <TableCell className="font-medium">{lead.firstName} {lead.lastName}</TableCell>
+                  <TableCell className="font-medium">{lead.firstName} {lead.lastName ?? ''}</TableCell>
                   <TableCell>
                     <div>
-                      <p className="text-sm">{lead.company}</p>
-                      <p className="text-xs text-muted-foreground">{lead.companySize} emp</p>
+                      <p className="text-sm">{lead.company ?? ''}</p>
+                      <p className="text-xs text-muted-foreground">{lead.companySize ? `${lead.companySize} emp` : ''}</p>
                     </div>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{lead.industry || '—'}</TableCell>
-                  <TableCell className="text-sm">{lead.jobTitle}</TableCell>
+                  <TableCell className="text-sm">{lead.jobTitle ?? ''}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className={statusConfig[lead.status].className}>
                       {statusConfig[lead.status].label}

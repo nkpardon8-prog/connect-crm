@@ -53,9 +53,9 @@ export default function LeadDetailPage() {
 
   useEffect(() => {
     if (lead) setEditData({
-      firstName: lead.firstName, lastName: lead.lastName, email: lead.email,
-      phone: lead.phone, jobTitle: lead.jobTitle, company: lead.company,
-      companySize: lead.companySize, industry: lead.industry,
+      firstName: lead.firstName, lastName: lead.lastName ?? '', email: lead.email,
+      phone: lead.phone, jobTitle: lead.jobTitle ?? '', company: lead.company ?? '',
+      companySize: lead.companySize ?? '', industry: lead.industry,
       location: lead.location, notes: lead.notes ?? '', linkedinUrl: lead.linkedinUrl || '',
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -95,9 +95,9 @@ export default function LeadDetailPage() {
   const handleCancelEdit = () => {
     setEditing(false);
     setEditData({
-      firstName: lead.firstName, lastName: lead.lastName, email: lead.email,
-      phone: lead.phone, jobTitle: lead.jobTitle, company: lead.company,
-      companySize: lead.companySize, industry: lead.industry,
+      firstName: lead.firstName, lastName: lead.lastName ?? '', email: lead.email,
+      phone: lead.phone, jobTitle: lead.jobTitle ?? '', company: lead.company ?? '',
+      companySize: lead.companySize ?? '', industry: lead.industry,
       location: lead.location, notes: lead.notes ?? '', linkedinUrl: lead.linkedinUrl || '',
     });
   };
@@ -176,8 +176,8 @@ export default function LeadDetailPage() {
                 <div className="flex-1 min-w-0">
                   {!editing && (
                     <>
-                      <h2 className="text-xl font-semibold text-foreground">{lead.firstName} {lead.lastName}</h2>
-                      <p className="text-sm text-muted-foreground">{lead.jobTitle}</p>
+                      <h2 className="text-xl font-semibold text-foreground">{lead.firstName} {lead.lastName ?? ''}</h2>
+                      <p className="text-sm text-muted-foreground">{lead.jobTitle ?? ''}</p>
                     </>
                   )}
                 </div>
@@ -264,7 +264,7 @@ export default function LeadDetailPage() {
                 <div className="space-y-3 text-sm">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Building2 className="h-4 w-4 flex-shrink-0" />
-                    <span>{lead.company} · {lead.companySize} employees</span>
+                    <span>{lead.company ?? ''}{lead.companySize ? ` · ${lead.companySize} employees` : ''}</span>
                   </div>
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <MapPin className="h-4 w-4 flex-shrink-0" />

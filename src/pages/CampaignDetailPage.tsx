@@ -444,7 +444,7 @@ export default function CampaignDetailPage() {
                 return (
                   <TableRow key={enrollment.id}>
                     <TableCell className="text-xs">
-                      {lead ? `${lead.firstName} ${lead.lastName}` : enrollment.email.split('@')[0]}
+                      {lead ? `${lead.firstName} ${lead.lastName ?? ''}`.trim() : enrollment.email.split('@')[0]}
                     </TableCell>
                     <TableCell className="text-xs">{enrollment.email}</TableCell>
                     <TableCell className={`text-xs font-medium ${statusColor}`}>
